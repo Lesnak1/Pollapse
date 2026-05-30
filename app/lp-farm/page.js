@@ -565,9 +565,34 @@ export default function LPFarmTerminal() {
                           
                           <td style={{ padding: '12px 14px', maxWidth: 200 }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                              <a href={`https://polymarket.com/event/${pool.eventSlug || pool.slug}`}
+                                target="_blank" rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = 'var(--primary)';
+                                  const svg = e.currentTarget.querySelector('svg');
+                                  if (svg) svg.style.opacity = '1';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = 'var(--text-primary)';
+                                  const svg = e.currentTarget.querySelector('svg');
+                                  if (svg) svg.style.opacity = '0.4';
+                                }}
+                                style={{ 
+                                  fontWeight: 600, 
+                                  color: 'var(--text-primary)', 
+                                  whiteSpace: 'nowrap', 
+                                  overflow: 'hidden', 
+                                  textOverflow: 'ellipsis', 
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  textDecoration: 'none',
+                                  transition: 'color 0.15s'
+                                }}>
                                 {truncate(pool.question, 40)}
-                              </span>
+                                <ArrowUpRight size={11} style={{ opacity: 0.4, transition: 'opacity 0.15s' }} />
+                              </a>
                               <div style={{ display: 'flex', gap: 6, fontSize: '0.6rem', alignItems: 'center' }}>
                                 <span className="badge" style={{ background: 'var(--bg-layer-3)', color: 'var(--text-dim)', padding: '1px 5px' }}>
                                   {pool.sector.toUpperCase()}

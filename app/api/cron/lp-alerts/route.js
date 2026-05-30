@@ -128,7 +128,7 @@ export async function GET(request) {
     const publicChannelId = process.env.TELEGRAM_CHAT_ID;
 
     // Load registered personalized users from JSON DB
-    const activeUsers = getActiveUsers();
+    const activeUsers = await getActiveUsers();
     const dispatchLog = [];
 
     // Helper to post Telegram messages

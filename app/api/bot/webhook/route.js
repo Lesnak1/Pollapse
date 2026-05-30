@@ -183,9 +183,9 @@ export async function POST(request) {
       const text = body.message.text.trim();
       const username = body.message.from?.username || '';
 
-      let user = getUser(chat.id);
+      let user = await getUser(chat.id);
       if (!user) {
-        user = saveUser({ chatId: chat.id, username });
+        user = await saveUser({ chatId: chat.id, username });
       }
 
       if (text.startsWith('/start') || text.startsWith('/menu')) {
@@ -208,9 +208,9 @@ export async function POST(request) {
       const messageId = cb.message.message_id;
       const data = cb.data;
 
-      let user = getUser(chatId);
+      let user = await getUser(chatId);
       if (!user) {
-        user = saveUser({ chatId });
+        user = await saveUser({ chatId });
       }
 
       if (data === 'menu_start') {
@@ -222,7 +222,7 @@ export async function POST(request) {
       else if (data.startsWith('budget_value_')) {
         const val = parseInt(data.replace('budget_value_', ''));
         user.budget = val;
-        saveUser(user);
+        await saveUser(user);
         await sendTelegramRequest('answerCallbackQuery', {
           callback_query_id: cb.id,
           text: `Budget updated to $${val.toLocaleString()}!`
@@ -235,7 +235,7 @@ export async function POST(request) {
       else if (data.startsWith('risk_value_')) {
         const val = data.replace('risk_value_', '');
         user.risk = val;
-        saveUser(user);
+        await saveUser(user);
         const riskLabels = { low: 'Low Risk', medium: 'Low & Medium', high: 'Degen (All)' };
         await sendTelegramRequest('answerCallbackQuery', {
           callback_query_id: cb.id,
@@ -264,7 +264,7 @@ export async function POST(request) {
           user.sectors = currentSectors;
         }
         
-        saveUser(user);
+        await saveUser(user);
         await sendTelegramRequest('answerCallbackQuery', {
           callback_query_id: cb.id,
           text: 'Sectors updated!'
@@ -273,7 +273,7 @@ export async function POST(request) {
       } 
       else if (data === 'toggle_status') {
         user.active = !user.active;
-        saveUser(user);
+        await saveUser(user);
         await sendTelegramRequest('answerCallbackQuery', {
           callback_query_id: cb.id,
           text: `Alerts ${user.active ? 'Activated' : 'Paused'}!`

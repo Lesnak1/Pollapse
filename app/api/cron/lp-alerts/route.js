@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getActiveUsers } from '@/lib/bot-db';
+import { getActiveUsers, getAlertCooldown, setAlertCooldown } from '@/lib/bot-db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -154,15 +154,16 @@ export async function GET(request) {
     // 2. DISPATCH PERSONALIZED USER ALERTS
     for (const user of activeUsers) {
       const userAlerts = [];
+      const userAlertsThisTime = [];
 
-      pools.forEach(pool => {
+      for (const pool of pools) {
         // Sector Filter Ingestion
         const matchesSector = user.sectors.includes('all') || user.sectors.includes(pool.sector);
-        if (!matchesSector) return;
+        if (!matchesSector) continue;
 
-        ['YES', 'NO'].forEach(side => {
+        for (const side of ['YES', 'NO']) {
           const eligibility = checkEligibility(pool, user.budget, side);
-          if (!eligibility.eligible) return; // budget doesn't meet minimum contracs
+          if (!eligibility.eligible) continue; // budget doesn't meet minimum contracs
 
           const fillRisk = getFillRisk(pool, user.budget, side);
           
@@ -170,14 +171,32 @@ export async function GET(request) {
           // - 'low': score <= 30 only
           // - 'medium': score <= 60 only
           // - 'high': any risk score allowed
-          if (user.risk === 'low' && fillRisk.score > 30) return;
-          if (user.risk === 'medium' && fillRisk.score > 60) return;
+          if (user.risk === 'low' && fillRisk.score > 30) continue;
+          if (user.risk === 'medium' && fillRisk.score > 60) continue;
 
           const reward = getRewardShare(pool, user.budget);
           const lpScore = getLPScore(pool, user.budget, side);
 
           // We only alert high quality Recommended opportunities for custom users too
           if (lpScore.score >= 70 && reward.dailyROI >= 0.04) {
+            // Check Cooldown with dynamic 20% delta limit
+            const previousAlert = await getAlertCooldown(user.chatId, pool.id, side);
+            if (previousAlert) {
+              const prevCushion = previousAlert.cushion || 0;
+              const prevRoi = previousAlert.roi || 0;
+
+              const currentCushion = fillRisk.relevantDepth || 0;
+              const currentRoi = reward.dailyROI || 0;
+
+              const cushionDiff = prevCushion > 0 ? Math.abs(currentCushion - prevCushion) / prevCushion : 0;
+              const roiDiff = prevRoi > 0 ? Math.abs(currentRoi - prevRoi) / prevRoi : 0;
+
+              // If metrics are stable (changed less than 20%), skip to avoid spamming
+              if (cushionDiff < 0.20 && roiDiff < 0.20) {
+                continue;
+              }
+            }
+
             const daysLeft = getDaysUntilEnd(pool.endDate);
             const appLink = `${origin}/lp-farm?selected=${pool.id}`;
             const polyLink = `https://polymarket.com/event/${pool.eventSlug || pool.slug}`;
@@ -185,14 +204,29 @@ export async function GET(request) {
             const message = `🔔 *PERSONALIZED SafeFarm Alert* 🚨\n\n*Safe LP Opportunity matching your exact filters!*\n\n📌 *Market:* ${pool.question}\n🗂️ *Sector:* ${pool.sector.toUpperCase()} (${side} side)\n💰 *Daily Reward Pool:* $${pool.dailyPool}/day\n\n📊 *Farming Metrics ($${user.budget.toLocaleString()} Budget):*\n• *Farming Verdict:* ${lpScore.badge}\n• *LP Suitability Score:* ${lpScore.score}/100\n• *Fill Risk:* ${fillRisk.emoji} ${fillRisk.score}% (${fillRisk.label})\n• *Cushion Wall:* $${fillRisk.relevantDepth.toLocaleString()} (Your Shield)\n• *Est. Daily Yield:* $${reward.dailyReward.toFixed(2)}/day\n• *Daily ROI:* ${reward.dailyROI.toFixed(3)}% (${(reward.dailyROI * 30).toFixed(2)}% Est. Monthly)\n• *Farming Horizon:* ${daysLeft} days remaining\n\n⚠️ *Min qualification:* min ${pool.rewardsMinSize} shares | max ${pool.rewardsMaxSpread}% spread limit.\n\n🔗 *Action:* [Open Pollapse Terminal](${appLink}) | [Trade on Polymarket](${polyLink})`;
 
             userAlerts.push(message);
+            userAlertsThisTime.push({ 
+              poolId: pool.id, 
+              side, 
+              cushion: fillRisk.relevantDepth, 
+              roi: reward.dailyROI 
+            });
           }
-        });
-      });
+        }
+      }
 
       if (userAlerts.length > 0 && botToken) {
         // Send top 2 alerts to the user
         const mergedText = userAlerts.slice(0, 2).join('\n\n---\n\n');
         const success = await sendTelegramMessage(user.chatId, mergedText);
+        if (success) {
+          // Set cooldown with metrics payload for delta comparisons
+          for (const item of userAlertsThisTime.slice(0, 2)) {
+            await setAlertCooldown(user.chatId, item.poolId, item.side, { 
+              cushion: item.cushion, 
+              roi: item.roi 
+            });
+          }
+        }
         dispatchLog.push({
           chatId: user.chatId,
           username: user.username,
@@ -204,16 +238,37 @@ export async function GET(request) {
 
     // 3. BROADCAST GENERAL CHANNEL ALERTS (Fallback/Public Channel)
     const publicAlerts = [];
-    pools.forEach(pool => {
-      ['YES', 'NO'].forEach(side => {
+    const publicAlertsThisTime = [];
+
+    for (const pool of pools) {
+      for (const side of ['YES', 'NO']) {
         const eligibility = checkEligibility(pool, defaultBudget, side);
-        if (!eligibility.eligible) return;
+        if (!eligibility.eligible) continue;
 
         const fillRisk = getFillRisk(pool, defaultBudget, side);
         const reward = getRewardShare(pool, defaultBudget);
         const lpScore = getLPScore(pool, defaultBudget, side);
 
         if (lpScore.score >= 70 && fillRisk.score <= 40 && reward.dailyROI >= 0.04) {
+          // Check public channel cooldown
+          if (publicChannelId) {
+            const previousAlert = await getAlertCooldown(publicChannelId, pool.id, side);
+            if (previousAlert) {
+              const prevCushion = previousAlert.cushion || 0;
+              const prevRoi = previousAlert.roi || 0;
+
+              const currentCushion = fillRisk.relevantDepth || 0;
+              const currentRoi = reward.dailyROI || 0;
+
+              const cushionDiff = prevCushion > 0 ? Math.abs(currentCushion - prevCushion) / prevCushion : 0;
+              const roiDiff = prevRoi > 0 ? Math.abs(currentRoi - prevRoi) / prevRoi : 0;
+
+              if (cushionDiff < 0.20 && roiDiff < 0.20) {
+                continue;
+              }
+            }
+          }
+
           const daysLeft = getDaysUntilEnd(pool.endDate);
           const appLink = `${origin}/lp-farm?selected=${pool.id}`;
           const polyLink = `https://polymarket.com/event/${pool.eventSlug || pool.slug}`;
@@ -221,14 +276,29 @@ export async function GET(request) {
           const message = `🔔 *POLLAPSE SafeFarm Alpha Alert* 🚨\n\n*Highly Profitable & Safe LP Opportunity Detected!*\n\n📌 *Market:* ${pool.question}\n🗂️ *Sector:* ${pool.sector.toUpperCase()} (${side} side)\n💰 *Daily Reward Pool:* $${pool.dailyPool}/day\n\n📊 *Farming Metrics ($${defaultBudget} Budget):*\n• *Farming Verdict:* ${lpScore.badge}\n• *LP Suitability Score:* ${lpScore.score}/100\n• *Fill Risk:* ${fillRisk.emoji} ${fillRisk.score}% (${fillRisk.label})\n• *Cushion Wall:* $${fillRisk.relevantDepth.toLocaleString()} (Strong Shield)\n• *Est. Daily Yield:* $${reward.dailyReward.toFixed(2)}/day\n• *Daily ROI:* ${reward.dailyROI.toFixed(3)}% (${(reward.dailyROI * 30).toFixed(2)}% Est. Monthly)\n• *Farming Horizon:* ${daysLeft} days remaining\n\n⚠️ *Min qualification:* min ${pool.rewardsMinSize} shares | max ${pool.rewardsMaxSpread}% spread limit.\n\n🔗 *Action:* [Farm Safely on Pollapse](${appLink}) | [Open Polymarket](${polyLink})`;
 
           publicAlerts.push(message);
+          publicAlertsThisTime.push({ 
+            poolId: pool.id, 
+            side, 
+            cushion: fillRisk.relevantDepth, 
+            roi: reward.dailyROI 
+          });
         }
-      });
-    });
+      }
+    }
 
     let postedToPublic = false;
     if (botToken && publicChannelId && publicAlerts.length > 0) {
       const text = publicAlerts.slice(0, 2).join('\n\n---\n\n');
       postedToPublic = await sendTelegramMessage(publicChannelId, text);
+      if (postedToPublic) {
+        // Set cooldown for all public channel dispatches
+        for (const item of publicAlertsThisTime.slice(0, 2)) {
+          await setAlertCooldown(publicChannelId, item.poolId, item.side, { 
+            cushion: item.cushion, 
+            roi: item.roi 
+          });
+        }
+      }
     }
 
     return NextResponse.json({

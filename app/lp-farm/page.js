@@ -306,7 +306,9 @@ export default function LPFarmTerminal() {
 
   // Spread zone check
   const isInRewardZone = (price, midpoint, maxSpread) => {
-    return Math.abs(parseFloat(price) - parseFloat(midpoint)) * 100 <= maxSpread;
+    const mid = parseFloat(midpoint) || 0.5;
+    const maxS = parseFloat(maxSpread) || 2.0;
+    return Math.abs(parseFloat(price) - mid) * 100 <= maxS;
   };
 
   // Pagination

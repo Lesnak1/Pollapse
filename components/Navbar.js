@@ -52,7 +52,7 @@ export default function Navbar() {
       <nav className="navbar">
         <div className="navbar-inner">
           <Link href="/" className="navbar-brand">
-            <div className="navbar-logo">P</div>
+            <img src="/logo.png" alt="Pollapse" className="navbar-logo" />
             <span className="navbar-brand-text">
               Pollapse<span className="navbar-brand-dot">.</span>
             </span>

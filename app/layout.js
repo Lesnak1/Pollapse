@@ -33,7 +33,24 @@ export default function RootLayout({ children }) {
           <div className="container">
             <p>
               Built by{' '}
-              <a href="https://github.com/Lesnak1" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue-light)', fontWeight: 600 }}>Leknax</a>
+              <a
+                href="https://github.com/Lesnak1"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover-link"
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  letterSpacing: '0.3px',
+                  display: 'inline-block',
+                  textShadow: '0 0 12px rgba(139, 92, 246, 0.15)',
+                }}
+              >
+                Leknax
+              </a>
               {' '}· Powered by{' '}
               <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer">Polymarket</a> CLOB V2
             </p>

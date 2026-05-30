@@ -1,6 +1,19 @@
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+});
 
 export const metadata = {
   title: 'Pollapse — Cross-Market Intelligence for Polymarket',
@@ -19,7 +32,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
         <div className="bg-mesh-glow">
           <div className="bg-sphere-1"></div>

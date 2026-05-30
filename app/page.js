@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { ArrowUpRight, X } from 'lucide-react';
 import { formatCurrency, formatPercent, formatNumber, truncate, getSectorColor, getSectorIcon, getDivergenceSeverity } from '@/lib/utils';
 
 export default function DashboardPage() {
@@ -9,6 +10,19 @@ export default function DashboardPage() {
   const [correlations, setCorrelations] = useState(null);
   const [markets, setMarkets] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showAlert, setShowAlert] = useState(false);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem('pollapse_dismissed_bot_alert');
+    if (!dismissed) {
+      setShowAlert(true);
+    }
+  }, []);
+
+  const handleDismissAlert = () => {
+    setShowAlert(false);
+    localStorage.setItem('pollapse_dismissed_bot_alert', 'true');
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -60,6 +74,45 @@ export default function DashboardPage() {
           </Link>
         </div>
       </section>
+
+      {/* ===== DISMISSABLE BOT ALERT ===== */}
+      {showAlert && (
+        <div className="card animate-fade-in" style={{
+          padding: '14px 20px',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)',
+          border: '1px solid rgba(139, 92, 246, 0.25)',
+          borderRadius: 12,
+          marginBottom: 24,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 260 }}>
+            <span className="live-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', boxShadow: '0 0 8px var(--primary)', display: 'inline-block', flexShrink: 0 }}></span>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              🤖 <strong style={{ color: 'var(--text-primary)' }}>Personalized Alerts on Telegram:</strong> Track SafeFarm cushion walls and custom budget qualification limits directly in your pocket. Connect our interactive bot: <a href="https://t.me/PollapseBot" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 2 }}>@PollapseBot <ArrowUpRight size={12} /></a>
+            </div>
+          </div>
+          <button 
+            onClick={handleDismissAlert} 
+            className="btn btn-ghost" 
+            style={{ 
+              padding: 4, 
+              borderRadius: '50%', 
+              color: 'var(--text-dim)', 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            aria-label="Dismiss alert"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* ===== STATS BAR ===== */}
       <div className="stats-bar stagger">

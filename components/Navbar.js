@@ -7,11 +7,11 @@ import { Sun, Moon, Menu, X } from 'lucide-react';
 
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard' },
+  { href: '/lp-farm', label: 'LP Farm' },
   { href: '/correlations', label: 'Correlations' },
   { href: '/sectors', label: 'Sectors' },
   { href: '/divergences', label: 'Divergences' },
   { href: '/thesis', label: 'Thesis Builder' },
-  { href: '/lp-farm', label: 'LP Farm' },
   { href: '/about', label: 'About' },
 ];
 

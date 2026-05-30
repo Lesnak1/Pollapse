@@ -965,6 +965,54 @@ export default function LPFarmTerminal() {
         </div>
       </div>
 
+      {/* Telegram Bot Marketing Banner */}
+      <div className="card animate-slide-up" style={{ 
+        padding: 32, 
+        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)', 
+        border: '1px solid rgba(139, 92, 246, 0.25)', 
+        borderRadius: 16,
+        marginBottom: 24,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 24
+      }}>
+        <div style={{ flex: 1, minWidth: 300 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: '1.5rem' }}>🤖</span>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Interactive Telegram Alert Assistant
+            </h3>
+            <span className="badge badge-primary" style={{ fontSize: '0.65rem', fontWeight: 600 }}>NEW</span>
+          </div>
+          <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 750 }}>
+            Never miss a profitable farming opportunity again. Our interactive Telegram Bot allows you to customize your average farming budget, target specific sectors, and specify risk thresholds. The SafeFarm strategy engine scans pools in real-time and dispatches tailored alerts directly to your pocket.
+          </p>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>🟢 Low/Medium/Degen Tiers</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>💰 Dynamic Budget Shares</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>📂 Politics/Crypto/Sports Filters</span>
+          </div>
+        </div>
+        <div>
+          <a href="https://t.me/PollapseBot" target="_blank" rel="noopener noreferrer" 
+            className="btn btn-primary"
+            style={{ 
+              padding: '12px 24px', 
+              fontSize: '0.85rem', 
+              fontWeight: 700, 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: 8,
+              boxShadow: '0 0 15px rgba(59, 130, 246, 0.35)',
+              transition: 'all 0.2s'
+            }}>
+            Launch Telegram Bot <ArrowUpRight size={16} />
+          </a>
+        </div>
+      </div>
+
       {/* LP Strategy Playbook */}
       <div className="card animate-slide-up" style={{ padding: 32, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>

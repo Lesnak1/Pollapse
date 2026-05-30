@@ -3,6 +3,7 @@ import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import CustomCursor from '@/components/CustomCursor';
+import TelegramFloatingWidget from '@/components/TelegramFloatingWidget';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -44,6 +45,7 @@ export default function RootLayout({ children }) {
         <div className="page-wrapper">
           {children}
         </div>
+        <TelegramFloatingWidget />
         <footer className="footer">
           <div className="container">
             <p>

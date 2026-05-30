@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchMarketBySlug, fetchPriceHistory } from '@/lib/polymarket';
+import { fetchMarketBySlug, fetchPriceHistory, extractEventSlug } from '@/lib/polymarket';
 import { classifyMarket } from '@/lib/utils';
 import cache from '@/lib/cache';
 
@@ -50,8 +50,13 @@ export async function GET(request, { params }) {
       }
     }
 
+    const eventSlug = extractEventSlug(market);
+
     const result = {
-      market,
+      market: {
+        ...market,
+        eventSlug,
+      },
       sector,
       history,
       tokenId,

@@ -95,6 +95,7 @@ export default function ThesisBuilderPage() {
         id: market.id,
         question: market.question,
         slug: market.slug,
+        eventSlug: market.eventSlug || market.slug || '',
         price: market.price || 0.5,
         prediction: 'YES', // default direction
         weight: 3, // default confidence weight (1-5)
@@ -210,7 +211,7 @@ export default function ThesisBuilderPage() {
     // Polymarket doesn't support multiple order placement in a single link,
     // so we open all constituent links in new tabs.
     thesisItems.forEach(item => {
-      window.open(`https://polymarket.com/event/${item.slug || ''}`, '_blank');
+      window.open(`https://polymarket.com/event/${item.eventSlug || item.slug || ''}`, '_blank');
     });
   };
 

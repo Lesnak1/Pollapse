@@ -92,7 +92,7 @@ $$\text{Sector Sentiment Index} = \frac{\sum (Price_i \times Weight_i)}{\sum Wei
 
 ---
 
-## ⚖️ Yasal Uyarı / Disclaimer
+## ⚖️ Legal Disclaimer
 
 Pollapse is solely an informational, statistical analytics terminal. We are not an exchange, broker, or financial advisor. Prediction markets carry substantial financial risks, high volatility, and complete capital loss hazards. Past performance of correlated assets is never a guarantee of future convergence. By using this software, you assume 100% of all trading risks and hold Pollapse and all affiliates completely harmless of any financial losses.
 

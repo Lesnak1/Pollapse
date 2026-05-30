@@ -184,9 +184,15 @@ input, select, textarea {
   color: var(--text-muted);
 }
 
-/* ============================
-   GRID
-   ============================ */
+.hover-link {
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.hover-link:hover {
+  color: var(--primary) !important;
+  text-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
 
 .grid {
   display: grid;

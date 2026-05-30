@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchAllActiveMarkets, extractPrice, extractVolume } from '@/lib/polymarket';
+import { fetchAllActiveMarkets, extractPrice, extractVolume, extractEventSlug } from '@/lib/polymarket';
 import { classifyMarket } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +21,7 @@ export async function GET(request) {
       question: m.question,
       description: m.description,
       slug: m.slug || m.market_slug,
+      eventSlug: extractEventSlug(m),
       price: extractPrice(m),
       volume: extractVolume(m),
       sector: classifyMarket(m),

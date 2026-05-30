@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchAllActiveMarkets, fetchPriceHistory, extractPrice, extractVolume } from '@/lib/polymarket';
+import { fetchAllActiveMarkets, fetchPriceHistory, extractPrice, extractVolume, extractEventSlug } from '@/lib/polymarket';
 import { classifyMarket } from '@/lib/utils';
 import { computeCorrelationPairs, findDivergences, buildGraphData } from '@/lib/correlations';
 import cache from '@/lib/cache';
@@ -26,6 +26,7 @@ export async function GET(request) {
         id: m.condition_id || m.id,
         question: m.question,
         slug: m.slug || m.market_slug,
+        eventSlug: extractEventSlug(m),
         price: extractPrice(m),
         volume: extractVolume(m),
         sector: classifyMarket(m),

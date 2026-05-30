@@ -265,11 +265,9 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-2 stagger">
             {(markets?.markets || []).slice(0, 8).map((market, i) => (
-              <a
+              <Link
                 key={i}
-                href={`https://polymarket.com/event/${market.slug || ''}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/market/${market.slug}`}
                 className="market-card"
               >
                 <div className="market-card-header">
@@ -302,7 +300,7 @@ export default function DashboardPage() {
                     Vol: {formatCurrency(market.volume)}
                   </span>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         )}

@@ -227,9 +227,11 @@ export default function DivergencesPage() {
                           {getSectorIcon(sectorA)} {sectorA}
                         </span>
                       </div>
-                      <h4 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                        {div.marketAData?.question}
-                      </h4>
+                      <Link href={`/market/${div.marketAData?.slug}`} style={{ textDecoration: 'none' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }} className="hover-link">
+                          {div.marketAData?.question}
+                        </h4>
+                      </Link>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
@@ -240,7 +242,7 @@ export default function DivergencesPage() {
                         </div>
                       </div>
                       <a
-                        href={`https://polymarket.com/event/${div.marketAData?.slug || ''}`}
+                        href={`https://polymarket.com/event/${div.marketAData?.eventSlug || div.marketAData?.slug || ''}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-secondary btn-sm"
@@ -260,9 +262,11 @@ export default function DivergencesPage() {
                           {getSectorIcon(sectorB)} {sectorB}
                         </span>
                       </div>
-                      <h4 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                        {div.marketBData?.question}
-                      </h4>
+                      <Link href={`/market/${div.marketBData?.slug}`} style={{ textDecoration: 'none' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }} className="hover-link">
+                          {div.marketBData?.question}
+                        </h4>
+                      </Link>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
@@ -278,7 +282,7 @@ export default function DivergencesPage() {
                         </div>
                       </div>
                       <a
-                        href={`https://polymarket.com/event/${div.marketBData?.slug || ''}`}
+                        href={`https://polymarket.com/event/${div.marketBData?.eventSlug || div.marketBData?.slug || ''}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-secondary btn-sm"

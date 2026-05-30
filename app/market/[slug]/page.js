@@ -217,7 +217,7 @@ export default function MarketDetailPage({ params }) {
                 </div>
               </div>
               <a
-                href={`https://polymarket.com/event/${market.slug || ''}`}
+                href={`https://polymarket.com/event/${market.eventSlug || market.slug || ''}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary btn-lg"

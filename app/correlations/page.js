@@ -333,7 +333,7 @@ export default function CorrelationsPage() {
 
                 {/* Open Trade leg link */}
                 <a
-                  href={`https://polymarket.com/event/${activeNodeInfo.slug || ''}`}
+                  href={`https://polymarket.com/event/${activeNodeInfo.eventSlug || activeNodeInfo.slug || ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-primary"

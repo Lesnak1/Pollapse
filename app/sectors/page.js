@@ -202,9 +202,11 @@ export default function SectorsPage() {
                     return (
                       <tr key={market.id || idx} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }} className="table-row-hover">
                         <td style={{ padding: '18px 24px', maxWidth: 400 }}>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-                            {market.question}
-                          </div>
+                          <Link href={`/market/${market.slug}`} style={{ textDecoration: 'none' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }} className="hover-link">
+                              {market.question}
+                            </div>
+                          </Link>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
                             ID: {market.id ? truncate(market.id, 12) : '—'}
                           </span>
@@ -237,7 +239,7 @@ export default function SectorsPage() {
                         <td style={{ padding: '18px 24px', textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                             <a
-                              href={`https://polymarket.com/event/${market.slug || ''}`}
+                              href={`https://polymarket.com/event/${market.eventSlug || market.slug || ''}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="btn btn-secondary btn-sm"

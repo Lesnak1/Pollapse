@@ -1,0 +1,54 @@
+import './globals.css';
+import Navbar from '@/components/Navbar';
+import Link from 'next/link';
+
+export const metadata = {
+  title: 'Pollapse — Cross-Market Intelligence for Polymarket',
+  description: 'Discover hidden correlations, detect divergences, and build multi-market theses on Polymarket. The intelligence layer that sees what others can\'t.',
+  openGraph: {
+    title: 'Pollapse — Cross-Market Intelligence for Polymarket',
+    description: 'Discover hidden correlations, detect divergences, and build multi-market theses on Polymarket.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Pollapse — Cross-Market Intelligence for Polymarket',
+    description: 'The intelligence layer for prediction markets.',
+  },
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <div className="bg-mesh-glow">
+          <div className="bg-sphere-1"></div>
+          <div className="bg-sphere-2"></div>
+        </div>
+        <Navbar />
+        <div className="page-wrapper">
+          {children}
+        </div>
+        <footer className="footer">
+          <div className="container">
+            <p>
+              Built by{' '}
+              <a href="https://github.com/Lesnak1" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue-light)', fontWeight: 600 }}>Leknax</a>
+              {' '}· Powered by{' '}
+              <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer">Polymarket</a> CLOB V2
+            </p>
+            <div className="footer-links">
+              <a href="https://x.com/LesnaCrex" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Twitter / X</a>
+              <span style={{ color: 'var(--text-dim)' }}>·</span>
+              <Link href="/docs">Documentation & API</Link>
+              <span style={{ color: 'var(--text-dim)' }}>·</span>
+              <Link href="/legal">Compliance & Disclaimers</Link>
+              <span style={{ color: 'var(--text-dim)' }}>·</span>
+              <a href="https://docs.polymarket.com" target="_blank" rel="noopener noreferrer">Polymarket API Docs</a>
+            </div>
+          </div>
+        </footer>
+      </body>
+    </html>
+  );
+}

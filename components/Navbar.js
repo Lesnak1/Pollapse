@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: '/sectors', label: 'Sectors' },
   { href: '/divergences', label: 'Divergences' },
   { href: '/thesis', label: 'Thesis Builder' },
+  { href: '/lp-farm', label: 'LP Farm' },
   { href: '/about', label: 'About' },
 ];
 

@@ -1,0 +1,1010 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { 
+  ArrowLeft, 
+  Coins, 
+  TrendingUp, 
+  BookOpen, 
+  ShieldAlert, 
+  DollarSign, 
+  RefreshCw, 
+  Search, 
+  AlertTriangle, 
+  Layers, 
+  HelpCircle, 
+  Zap, 
+  CheckCircle2, 
+  Sliders, 
+  Clock,
+  Shield,
+  ArrowUpRight,
+  Info,
+  CheckCircle,
+  XCircle
+} from 'lucide-react';
+import { formatCurrency, formatNumber, truncate } from '@/lib/utils';
+
+export default function LPFarmTerminal() {
+  const [pools, setPools] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPool, setSelectedPool] = useState(null);
+  
+  // Strategy engine
+  const [budget, setBudget] = useState(1500);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSector, setSelectedSector] = useState('all');
+  const [sortBy, setSortBy] = useState('score'); // score, reward, liquidity, fillRisk
+
+  // Live orderbook
+  const [orderbook, setOrderbook] = useState(null);
+  const [orderbookLoading, setOrderbookLoading] = useState(false);
+  const [selectedTokenSide, setSelectedTokenSide] = useState('YES');
+
+  // ===========================
+  // DATA FETCHING
+  // ===========================
+
+  async function fetchRewardPools() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/lp-farm');
+      const data = await res.json();
+      if (data && data.pools) {
+        setPools(data.pools);
+        if (data.pools.length > 0 && !selectedPool) {
+          setSelectedPool(data.pools[0]);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load LP pools:', e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchRewardPools(); }, []);
+
+  // Live orderbook polling
+  async function fetchLiveOrderbook(pool, side) {
+    if (!pool || !pool.tokenIds || pool.tokenIds.length === 0) return;
+    const tokenId = side === 'YES' ? pool.tokenIds[0] : pool.tokenIds[1];
+    if (!tokenId) return;
+
+    setOrderbookLoading(true);
+    try {
+      const res = await fetch(`/api/lp-farm/orderbook?token_id=${tokenId}`);
+      const data = await res.json();
+      setOrderbook(data?.orderbook || null);
+    } catch (e) {
+      console.error('Failed to fetch orderbook:', e);
+      setOrderbook(null);
+    } finally {
+      setOrderbookLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedPool) return;
+    fetchLiveOrderbook(selectedPool, selectedTokenSide);
+    const interval = setInterval(() => {
+      fetchLiveOrderbook(selectedPool, selectedTokenSide);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [selectedPool, selectedTokenSide]);
+
+  const handleSelectPool = (pool) => {
+    setSelectedPool(pool);
+    setSelectedTokenSide('YES');
+  };
+
+  // ===========================
+  // CORE LP FARM INTELLIGENCE
+  // ===========================
+
+  // 1. Days until market resolves — longer = safer for farming
+  const getDaysUntilEnd = (endDate) => {
+    if (!endDate) return 999;
+    const now = new Date();
+    const end = new Date(endDate);
+    return Math.max(0, Math.ceil((end - now) / 86400000));
+  };
+
+  // Check compliance/qualification requirements
+  const checkEligibility = (pool, userBudget, side) => {
+    const price = side === 'YES' ? (pool.price || 0.5) : (1 - (pool.price || 0.5));
+    const minShares = pool.rewardsMinSize || 100;
+    // required capital to place a limit order of minShares at that price
+    const requiredCapital = minShares * price;
+    const eligible = userBudget >= requiredCapital;
+    const estimatedShares = userBudget / price;
+    return { eligible, requiredCapital, minShares, estimatedShares, price };
+  };
+
+  // 2. Fill Risk — THE most important metric per tweets
+  // "Order book hacmi iyi olmalı. Hacim azsa emir hemen dolar" 
+  // "En önemli iki konu: Order Book ve Monitoring"
+  const getFillRisk = (pool, book, userBudget, side = 'YES') => {
+    let totalDepth = 0;
+    let bidDepthUSD = 0;
+    let askDepthUSD = 0;
+
+    if (book) {
+      if (book.bids) {
+        book.bids.forEach(b => {
+          bidDepthUSD += parseFloat(b.price) * parseFloat(b.size);
+        });
+      }
+      if (book.asks) {
+        book.asks.forEach(a => {
+          askDepthUSD += parseFloat(a.price) * parseFloat(a.size);
+        });
+      }
+      totalDepth = bidDepthUSD + askDepthUSD;
+    } else {
+      // Estimate depth from pool CLOB liquidity if live orderbook is not yet loaded
+      totalDepth = pool.liquidity || 0;
+      bidDepthUSD = totalDepth / 2;
+      askDepthUSD = totalDepth / 2;
+    }
+
+    // Cushion ratio (cushion wall compared to user budget)
+    // YES side bid is protected by existing bids (bid depth)
+    // NO side bid is protected by asks (ask depth)
+    const relevantDepth = side === 'YES' ? bidDepthUSD : askDepthUSD;
+    const cushionRatio = relevantDepth > 0 ? relevantDepth / userBudget : 0;
+    
+    // Factor in volatility from sector
+    let sectorPenalty = 0;
+    if (pool.sector === 'sports') sectorPenalty = 40;
+    else if (pool.sector === 'geopolitics') sectorPenalty = 25;
+    else if (pool.sector === 'crypto') sectorPenalty = 15;
+
+    // Factor in days until resolution — closer = riskier
+    const daysLeft = getDaysUntilEnd(pool.endDate);
+    let timePenalty = 0;
+    if (daysLeft < 3) timePenalty = 35;
+    else if (daysLeft < 14) timePenalty = 15;
+    else if (daysLeft < 30) timePenalty = 5;
+
+    // Factor in 24h price change
+    const changePenalty = Math.min(30, (pool.oneDayChange || 0) * 300);
+
+    // Base safety from cushion ratio (higher = safer, so subtract from penalty)
+    let baseSafety = Math.min(50, cushionRatio * 5);
+
+    // Final fill risk score: 0 = very safe, 100 = extremely dangerous
+    const fillRisk = Math.min(100, Math.max(0, Math.round(
+      100 - baseSafety + sectorPenalty + timePenalty + changePenalty
+    )));
+
+    let label, color, emoji;
+    if (fillRisk <= 30) { label = 'Low Risk'; color = 'var(--success)'; emoji = '🟢'; }
+    else if (fillRisk <= 60) { label = 'Medium Risk'; color = 'var(--warning)'; emoji = '🟡'; }
+    else { label = 'High Risk'; color = 'var(--danger)'; emoji = '🔴'; }
+
+    return { 
+      score: fillRisk, 
+      label, 
+      color, 
+      emoji, 
+      bidDepthUSD: Math.round(bidDepthUSD), 
+      askDepthUSD: Math.round(askDepthUSD), 
+      totalDepth: Math.round(totalDepth),
+      relevantDepth: Math.round(relevantDepth)
+    };
+  };
+
+  // 3. Estimated Reward Share
+  const getRewardShare = (pool, userBudget) => {
+    const totalLiq = pool.liquidity || 50000;
+    const sharePercent = (userBudget / (totalLiq + userBudget)) * 100;
+    const dailyReward = (sharePercent / 100) * (pool.dailyPool || 100);
+    const monthlyReward = dailyReward * 30;
+    const dailyROI = userBudget > 0 ? (dailyReward / userBudget) * 100 : 0;
+    
+    return { sharePercent, dailyReward, monthlyReward, dailyROI };
+  };
+
+  // 4. LP Suitability Score — weighted combination of real factors
+  // Tweet strategy: high reward + low competition + thick book + stable price + long duration
+  const getLPScore = (pool, book, userBudget, side = 'YES') => {
+    const eligibility = checkEligibility(pool, userBudget, side);
+    
+    // Ineligible pools get set to a low fixed score (cannot qualify)
+    if (!eligibility.eligible) {
+      return { score: 10, verdict: 'Ineligible', color: 'var(--text-dim)', badge: '❌ INELIGIBLE' };
+    }
+
+    const fillRisk = getFillRisk(pool, book, userBudget, side);
+    const reward = getRewardShare(pool, userBudget);
+    const daysLeft = getDaysUntilEnd(pool.endDate);
+    
+    // Safety score (inverted fill risk, 40% weight)
+    const safetyScore = 100 - fillRisk.score;
+    
+    // Yield attractiveness (25% weight)
+    const yieldScore = Math.min(100, reward.dailyROI * 500);
+    
+    // Competition advantage (20% weight)
+    const competitionRatio = pool.liquidity > 0 ? userBudget / pool.liquidity : 1;
+    const compScore = Math.min(100, competitionRatio * 1000);
+    
+    // Duration safety (15% weight)
+    const durationScore = Math.min(100, daysLeft * 1.5);
+
+    const finalScore = Math.round(
+      safetyScore * 0.40 +
+      yieldScore * 0.25 +
+      compScore * 0.20 +
+      durationScore * 0.15
+    );
+    
+    const clamped = Math.min(100, Math.max(0, finalScore));
+    
+    let verdict, color, badge;
+    if (clamped >= 70) { verdict = 'Recommended'; color = 'var(--success)'; badge = '✅ RECOMMENDED'; }
+    else if (clamped >= 45) { verdict = 'Moderate'; color = 'var(--warning)'; badge = '⚠️ CAUTION'; }
+    else { verdict = 'Risky'; color = 'var(--danger)'; badge = '🚫 HIGH RISK'; }
+
+    return { score: clamped, verdict, color, badge };
+  };
+
+  // ===========================
+  // FILTERING & SORTING
+  // ===========================
+
+  const sectors = [
+    { id: 'all', label: 'All Sectors' },
+    { id: 'politics', label: '🏛️ Politics' },
+    { id: 'crypto', label: '₿ Crypto' },
+    { id: 'geopolitics', label: '🌍 Geopolitics' },
+    { id: 'economics', label: '📈 Economics' },
+    { id: 'tech', label: '🤖 Tech' },
+    { id: 'sports', label: '⚽ Sports' }
+  ];
+
+  const enrichedPools = useMemo(() => {
+    return pools.map(p => ({
+      ...p,
+      daysLeft: getDaysUntilEnd(p.endDate),
+      rewardShare: getRewardShare(p, budget),
+      lpScore: getLPScore(p, null, budget, selectedTokenSide), // Orderbook data only for selected
+      fillRisk: getFillRisk(p, null, budget, selectedTokenSide),
+      eligibility: checkEligibility(p, budget, selectedTokenSide)
+    }));
+  }, [pools, budget, selectedTokenSide]);
+
+  const filteredPools = useMemo(() => {
+    let filtered = enrichedPools.filter(p => {
+      const matchesSearch = p.question.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSector = selectedSector === 'all' || p.sector === selectedSector;
+      return matchesSearch && matchesSector;
+    });
+
+    // Sort
+    if (sortBy === 'score') filtered.sort((a, b) => b.lpScore.score - a.lpScore.score);
+    else if (sortBy === 'reward') filtered.sort((a, b) => b.rewardShare.dailyReward - a.rewardShare.dailyReward);
+    else if (sortBy === 'liquidity') filtered.sort((a, b) => (b.liquidity || 0) - (a.liquidity || 0));
+    else if (sortBy === 'fillRisk') filtered.sort((a, b) => a.fillRisk.score - b.fillRisk.score);
+
+    return filtered;
+  }, [enrichedPools, searchQuery, selectedSector, sortBy]);
+
+  // Active pool detailed metrics (with live orderbook)
+  const activeMetrics = useMemo(() => {
+    if (!selectedPool) return null;
+    return {
+      fillRisk: getFillRisk(selectedPool, orderbook, budget, selectedTokenSide),
+      rewardShare: getRewardShare(selectedPool, budget),
+      lpScore: getLPScore(selectedPool, orderbook, budget, selectedTokenSide),
+      daysLeft: getDaysUntilEnd(selectedPool.endDate),
+      eligibility: checkEligibility(selectedPool, budget, selectedTokenSide)
+    };
+  }, [selectedPool, orderbook, budget, selectedTokenSide]);
+
+  // Spread zone check
+  const isInRewardZone = (price, midpoint, maxSpread) => {
+    return Math.abs(parseFloat(price) - parseFloat(midpoint)) * 100 <= maxSpread;
+  };
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 7;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedSector, sortBy, budget]);
+
+  const totalPages = Math.ceil(filteredPools.length / ITEMS_PER_PAGE);
+
+  const paginatedPools = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredPools.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredPools, currentPage]);
+
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      pageNumbers.push(1);
+
+      let start = Math.max(2, currentPage - 1);
+      let end = Math.min(totalPages - 1, currentPage + 1);
+
+      if (currentPage <= 3) {
+        end = 4;
+      } else if (currentPage >= totalPages - 2) {
+        start = totalPages - 3;
+      }
+
+      if (start > 2) {
+        pageNumbers.push('...');
+      }
+
+      for (let i = start; i <= end; i++) {
+        pageNumbers.push(i);
+      }
+
+      if (end < totalPages - 1) {
+        pageNumbers.push('...');
+      }
+
+      pageNumbers.push(totalPages);
+    }
+    return pageNumbers;
+  };
+
+  // ===========================
+  // RENDER
+  // ===========================
+  return (
+    <div className="container page-content animate-fade-in" style={{ paddingBottom: 64 }}>
+      {/* Back */}
+      <div style={{ marginBottom: 24 }}>
+        <Link href="/" className="btn btn-ghost btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <ArrowLeft size={16} /> Back to Dashboard
+        </Link>
+      </div>
+
+      {/* Hero */}
+      <div className="section-header" style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <span className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+            <Zap size={12} /> LP FARM STRATEGY TERMINAL
+          </span>
+          <h1 className="hero-title" style={{ fontSize: '2.5rem', marginTop: 12, marginBottom: 8 }}>
+            LP SafeFarm <span className="highlight" style={{ background: 'linear-gradient(135deg, var(--primary), var(--purple))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Strategy Engine</span>
+          </h1>
+          <p className="section-subtitle" style={{ maxWidth: 850 }}>
+            Analyze Polymarket CLOB V2 liquidity incentive pools using <strong>100% live data</strong>.
+            Verify strict compliance qualification, minimize limit order fill risk, and discover the safest spread zones to maximize yield.
+          </p>
+        </div>
+        <button onClick={fetchRewardPools} disabled={loading}
+          className="btn btn-secondary btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'center' }}>
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh Data
+        </button>
+      </div>
+
+      {/* Explainer Banner */}
+      <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12, marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Info size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <h4 style={{ margin: '0 0 4px 0', fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>How LP Farming Works</h4>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+              LP Farming on Polymarket involves <strong>placing limit orders in active incentive pools</strong>. As long as your orders remain unfilled (avoiding fill risk), you earn daily USDC rewards proportional to your share of the pool. 
+              The ultimate question is <strong>which market to select</strong>: high rewards, low competition, thick orderbook cushion, stable price bands, and longer resolution times are the safest and most profitable choices. 
+              This terminal automates the analysis using live CLOB data to rank the best opportunities for your custom budget.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Metrics */}
+      <div className="grid grid-4" style={{ gap: 20, marginBottom: 32 }}>
+        <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 500 }}>Active Farm Pools</span>
+            <Coins size={16} style={{ color: 'var(--primary)' }} />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+            {loading ? '—' : pools.length}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4 }}>Incentivized pools on CLOB V2</div>
+        </div>
+
+        <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 500 }}>Est. Daily Rewards</span>
+            <DollarSign size={16} style={{ color: 'var(--success)' }} />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--success)' }}>
+            {loading ? '—' : formatCurrency(pools.reduce((acc, p) => acc + (p.dailyPool || 0), 0))}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4 }}>USDC distributed daily across all pools</div>
+        </div>
+
+        <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 500 }}>Total CLOB Liquidity</span>
+            <TrendingUp size={16} style={{ color: 'var(--purple)' }} />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+            {loading ? '—' : formatCurrency(pools.reduce((acc, p) => acc + (p.liquidity || 0), 0))}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4 }}>Competing liquidity across pools</div>
+        </div>
+
+        <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 500 }}>Your LP Budget</span>
+            <Sliders size={16} style={{ color: 'var(--warning)' }} />
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>
+            {formatCurrency(budget)}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4 }}>Adjust below to see personalized yields</div>
+        </div>
+      </div>
+
+      {/* Budget Control */}
+      <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Sliders size={16} style={{ color: 'var(--primary)' }} />
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>LP Budget:</label>
+          </div>
+          <input 
+            type="range" min="100" max="10000" step="100" value={budget}
+            onChange={(e) => setBudget(parseInt(e.target.value))}
+            style={{ flex: 1, minWidth: 200, accentColor: 'var(--primary)', height: 6 }}
+          />
+          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary)', fontWeight: 700, fontSize: '1rem', minWidth: 65 }}>
+            {formatCurrency(budget)}
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[500, 1000, 1500, 3000, 5000].map(val => (
+              <button key={val} onClick={() => setBudget(val)}
+                className={`btn btn-sm ${budget === val ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '3px 8px', fontSize: '0.7rem' }}>{formatCurrency(val)}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Grid */}
+      <div className="grid grid-12" style={{ gap: 24, alignItems: 'start', marginBottom: 32 }}>
+        
+        {/* LEFT: Screener (7 cols) */}
+        <div style={{ gridColumn: 'span 7', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          
+          {/* Search & Filter Bar */}
+          <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Layers size={18} style={{ color: 'var(--purple)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>Live Rewards Pool Screener</h3>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: 9, color: 'var(--text-dim)' }} />
+                <input type="text" placeholder="Search markets..." value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ padding: '8px 12px 8px 30px', background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.75rem', outline: 'none', width: 200 }} />
+              </div>
+            </div>
+
+            {/* Sector chips */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {sectors.map(sec => (
+                <button key={sec.id} onClick={() => setSelectedSector(sec.id)}
+                  className={`btn btn-sm ${selectedSector === sec.id ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ padding: '5px 10px', fontSize: '0.65rem', borderRadius: 20 }}>{sec.label}</button>
+              ))}
+            </div>
+
+            {/* Sort controls */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+              <span style={{ fontWeight: 600 }}>Sort:</span>
+              {[
+                { id: 'score', label: '🏆 Best Score' },
+                { id: 'reward', label: '💰 Highest Yield' },
+                { id: 'fillRisk', label: '🛡️ Safest First' },
+                { id: 'liquidity', label: '📊 Most Liquid' },
+              ].map(s => (
+                <button key={s.id} onClick={() => setSortBy(s.id)}
+                  className={`btn btn-sm ${sortBy === s.id ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ padding: '3px 8px', fontSize: '0.65rem' }}>{s.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="card" style={{ background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12, overflow: 'hidden' }}>
+            {loading ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-dim)' }}>Loading live reward pools from Polymarket...</p>
+              </div>
+            ) : filteredPools.length === 0 ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <AlertTriangle size={32} style={{ color: 'var(--text-dim)', marginBottom: 12 }} />
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>No Active Pools Found</p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: 'var(--text-dim)' }}>Try adjusting your search or filters.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.73rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-layer-3)', borderBottom: '1px solid var(--border-color)' }}>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)', fontWeight: 600 }}>Market</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Reward/Day</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Your Est. Yield</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Fill Risk</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Days Left</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)', fontWeight: 600 }}>Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedPools.map((pool, idx) => {
+                      const isSelected = selectedPool && selectedPool.id === pool.id;
+                      return (
+                        <tr key={pool.id || idx} onClick={() => handleSelectPool(pool)}
+                          className="table-row-hover"
+                          style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer',
+                            background: isSelected ? 'rgba(59, 130, 246, 0.06)' : 'transparent', transition: 'background 0.15s' }}>
+                          
+                          <td style={{ padding: '12px 14px', maxWidth: 200 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                                {truncate(pool.question, 40)}
+                              </span>
+                              <div style={{ display: 'flex', gap: 6, fontSize: '0.6rem', alignItems: 'center' }}>
+                                <span className="badge" style={{ background: 'var(--bg-layer-3)', color: 'var(--text-dim)', padding: '1px 5px' }}>
+                                  {pool.sector.toUpperCase()}
+                                </span>
+                                <span style={{ color: 'var(--text-dim)' }}>
+                                  Spread: {pool.rewardsMaxSpread}% · Min: {pool.rewardsMinSize}
+                                </span>
+                                {!pool.eligibility.eligible && (
+                                  <span style={{ color: 'var(--danger)', fontWeight: 700, fontSize: '0.55rem', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                    ⚠️ Ineligible
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--success)' }}>
+                            {formatCurrency(pool.dailyPool)}/d
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: pool.eligibility.eligible ? 'var(--text-primary)' : 'var(--text-dim)', textDecoration: pool.eligibility.eligible ? 'none' : 'line-through' }}>
+                              {formatCurrency(pool.rewardShare.dailyReward)}/d
+                            </div>
+                            <div style={{ fontSize: '0.6rem', color: 'var(--text-dim)' }}>
+                              Share: {pool.rewardShare.sharePercent.toFixed(2)}%
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: pool.fillRisk.color }}>
+                              {pool.fillRisk.emoji} {pool.fillRisk.label}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: pool.daysLeft < 7 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                            {pool.daysLeft}d
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <span className="badge" style={{ background: `${pool.lpScore.color}15`, color: pool.lpScore.color, fontWeight: 700, padding: '3px 8px', borderRadius: 6, fontSize: '0.65rem', fontFamily: 'var(--font-mono)' }}>
+                              {pool.lpScore.score} · {pool.lpScore.verdict}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalPages > 1 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 20px',
+                  borderTop: '1px solid var(--border-color)',
+                  background: 'var(--bg-layer-3)',
+                  fontSize: '0.7rem',
+                  color: 'var(--text-dim)',
+                  flexWrap: 'wrap',
+                  gap: 12
+                }}>
+                  <div>
+                    Showing <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to{' '}
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{Math.min(currentPage * ITEMS_PER_PAGE, filteredPools.length)}</span> of{' '}
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{filteredPools.length}</span> pools
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="btn btn-sm btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.65rem', opacity: currentPage === 1 ? 0.5 : 1 }}>
+                      Prev
+                    </button>
+                    
+                    {getPageNumbers().map((pageNum, index) => {
+                      if (pageNum === '...') {
+                        return (
+                          <span key={`ellipsis-${index}`} style={{ padding: '0 6px', color: 'var(--text-dim)', fontSize: '0.75rem', fontWeight: 600 }}>
+                            ...
+                          </span>
+                        );
+                      }
+                      return (
+                        <button 
+                          key={pageNum} 
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-ghost'}`}
+                          style={{ 
+                            padding: '4px 10px', 
+                            fontSize: '0.68rem', 
+                            minWidth: 28,
+                            height: 28,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: 6
+                          }}>
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="btn btn-sm btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.65rem', opacity: currentPage === totalPages ? 0.5 : 1 }}>
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          </div>
+        </div>
+
+        {/* RIGHT: Live Order Book & Analysis (5 cols) */}
+        <div style={{ gridColumn: 'span 5', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="card animate-slide-up" style={{ padding: 24, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {selectedPool && activeMetrics ? (
+              <>
+                {/* Header */}
+                <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <span className="badge badge-amber" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.65rem', fontWeight: 600 }}>
+                      <BookOpen size={10} /> LIVE ORDER BOOK
+                    </span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {['YES', 'NO'].map(side => (
+                        <button key={side} onClick={() => setSelectedTokenSide(side)}
+                          className={`btn btn-sm ${selectedTokenSide === side ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '2px 8px', fontSize: '0.65rem' }}>{side} token</button>
+                      ))}
+                    </div>
+                  </div>
+                  <h4 style={{ margin: '6px 0 0 0', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                    {selectedPool.question}
+                  </h4>
+                </div>
+
+                {/* Key Metrics Dashboard */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, background: 'var(--bg-layer-3)', padding: 14, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                  <div>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', display: 'block', marginBottom: 3 }}>Fill Risk</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.95rem', fontWeight: 700, color: activeMetrics.fillRisk.color }}>
+                      {activeMetrics.fillRisk.emoji} {activeMetrics.fillRisk.score}%
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', display: 'block', marginBottom: 3 }}>Cushion Wall</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {formatCurrency(activeMetrics.fillRisk.relevantDepth)}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', display: 'block', marginBottom: 3 }}>Est. Daily</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.95rem', fontWeight: 700, color: activeMetrics.eligibility.eligible ? 'var(--success)' : 'var(--text-dim)' }}>
+                      {activeMetrics.eligibility.eligible ? formatCurrency(activeMetrics.rewardShare.dailyReward) : '$0.00'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Compliance & Qualification Check (CRITICAL) */}
+                <div style={{ padding: '12px 14px', background: activeMetrics.eligibility.eligible ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)', border: `1px solid ${activeMetrics.eligibility.eligible ? 'var(--success)' : 'var(--danger)'}`, borderRadius: 12, display: 'flex', gap: 10, flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.75rem', color: activeMetrics.eligibility.eligible ? 'var(--success)' : 'var(--danger)' }}>
+                    {activeMetrics.eligibility.eligible ? (
+                      <>
+                        <CheckCircle size={16} /> COMPLIANCE STATUS: QUALIFIED
+                      </>
+                    ) : (
+                      <>
+                        <XCircle size={16} /> COMPLIANCE STATUS: INELIGIBLE
+                      </>
+                    )}
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    {activeMetrics.eligibility.eligible ? (
+                      `Your budget (${formatCurrency(budget)}) yields ~${Math.round(activeMetrics.eligibility.estimatedShares)} shares at the ${selectedTokenSide} token price of $${activeMetrics.eligibility.price.toFixed(3)}, which successfully exceeds the pool's minimum requirement of ${activeMetrics.eligibility.minShares} shares. You are fully eligible to earn daily rewards.`
+                    ) : (
+                      `Your budget (${formatCurrency(budget)}) only purchases ~${Math.round(activeMetrics.eligibility.estimatedShares)} shares on the ${selectedTokenSide} token (price: $${activeMetrics.eligibility.price.toFixed(3)}), failing the pool's strict minimum requirement of ${activeMetrics.eligibility.minShares} shares. Increase budget to at least ${formatCurrency(activeMetrics.eligibility.requiredCapital)} to qualify.`
+                    )}
+                  </p>
+                </div>
+
+                {/* Yield Breakdown */}
+                <div style={{ background: 'var(--bg-layer-3)', padding: 14, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: 0.8, display: 'block', marginBottom: 10 }}>
+                    Estimated Yield with {formatCurrency(budget)} Budget
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.6rem', color: 'var(--text-dim)' }}>Pool Share</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {activeMetrics.eligibility.eligible ? `%${activeMetrics.rewardShare.sharePercent.toFixed(2)}` : '%0.00'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.6rem', color: 'var(--text-dim)' }}>Daily</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600, color: activeMetrics.eligibility.eligible ? 'var(--success)' : 'var(--text-dim)' }}>
+                        {activeMetrics.eligibility.eligible ? formatCurrency(activeMetrics.rewardShare.dailyReward) : '$0.00'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.6rem', color: 'var(--text-dim)' }}>Monthly</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600, color: activeMetrics.eligibility.eligible ? 'var(--text-primary)' : 'var(--text-dim)' }}>
+                        {activeMetrics.eligibility.eligible ? formatCurrency(activeMetrics.rewardShare.monthlyReward) : '$0.00'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.6rem', color: 'var(--text-dim)' }}>Daily ROI</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600, color: activeMetrics.eligibility.eligible ? 'var(--warning)' : 'var(--text-dim)' }}>
+                        {activeMetrics.eligibility.eligible ? `%${activeMetrics.rewardShare.dailyROI.toFixed(3)}` : '%0.000'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Safety Alerts */}
+                {/* 1. Spread Qualification Warning */}
+                {selectedPool.currentSpread !== null && (selectedPool.currentSpread * 100) > selectedPool.rewardsMaxSpread && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(245, 158, 11, 0.06)', border: '1px solid var(--warning)', borderRadius: 10, display: 'flex', gap: 10 }}>
+                    <AlertTriangle size={18} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: 1 }} />
+                    <div>
+                      <h5 style={{ margin: '0 0 2px 0', fontSize: '0.75rem', fontWeight: 700, color: 'var(--warning)' }}>
+                        ⚠️ SPREAD EXCEEDS MAX ALLOWABLE
+                      </h5>
+                      <p style={{ margin: 0, fontSize: '0.65rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                        The market spread ({(selectedPool.currentSpread * 100).toFixed(2)}%) is wider than the pool&apos;s maximum rewarded spread ({selectedPool.rewardsMaxSpread}%).
+                        To qualify for rewards, you must place your limit orders closer to the midpoint than the current best bid/ask, which will increase your fill risk.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Thin Cushion Shield Warning */}
+                {activeMetrics.fillRisk.relevantDepth > 0 && activeMetrics.fillRisk.relevantDepth < budget && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid var(--danger)', borderRadius: 10, display: 'flex', gap: 10 }}>
+                    <ShieldAlert size={18} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 1 }} />
+                    <div>
+                      <h5 style={{ margin: '0 0 2px 0', fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger)' }}>
+                        ⚠️ THIN CUSHION SHIELD
+                      </h5>
+                      <p style={{ margin: 0, fontSize: '0.65rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                        The order book depth on the {selectedTokenSide} side ({formatCurrency(activeMetrics.fillRisk.relevantDepth)}) is smaller than your budget ({formatCurrency(budget)}).
+                        A single market order could easily wipe out the cushion and fill your limit orders. <strong>Consider choosing a pool with a thicker cushion or lowering your budget.</strong>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Sport Market Volatility Warning */}
+                {selectedPool.sector === 'sports' && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(245, 158, 11, 0.06)', border: '1px solid var(--warning)', borderRadius: 10, display: 'flex', gap: 10 }}>
+                    <Clock size={18} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: 1 }} />
+                    <div>
+                      <h5 style={{ margin: '0 0 2px 0', fontSize: '0.75rem', fontWeight: 700, color: 'var(--warning)' }}>
+                        🏟️ SPORTS MARKET — WATCH THE CLOCK
+                      </h5>
+                      <p style={{ margin: 0, fontSize: '0.65rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                        During live matches, prices swing violently and order books thin out instantly. 
+                        <strong> Avoid keeping active limit orders open close to or during live matches.</strong> Farming during off-peak hours (e.g., US late nights) is significantly safer.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Near Resolution Warning */}
+                {activeMetrics.daysLeft < 7 && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid var(--danger)', borderRadius: 10, display: 'flex', gap: 10 }}>
+                    <Clock size={18} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 1 }} />
+                    <div>
+                      <h5 style={{ margin: '0 0 2px 0', fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger)' }}>
+                        ⏰ CLOSING SOON — {activeMetrics.daysLeft} DAYS LEFT
+                      </h5>
+                      <p style={{ margin: 0, fontSize: '0.65rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                        This market is approaching its resolution date. As the outcome becomes certain, price movements trigger heavy volume that can fill your limits. 
+                        <strong> Prefer longer-duration pools for passive farming.</strong>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Order Book Visualization */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-dim)', padding: '0 4px', fontWeight: 600 }}>
+                    <span>ASK PRICE (ASK WALL)</span>
+                    <span>SIZE</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 2, maxHeight: 100, overflowY: 'hidden', borderBottom: '1px solid var(--border-color)', paddingBottom: 6 }}>
+                    {orderbookLoading ? (
+                      <div className="skeleton" style={{ height: 36, borderRadius: 4 }}></div>
+                    ) : !orderbook?.asks?.length ? (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textAlign: 'center', padding: 6 }}>No active asks</span>
+                    ) : (
+                      orderbook.asks.slice(0, 5).map((ask, i) => {
+                        const price = parseFloat(ask.price);
+                        const inZone = isInRewardZone(price, selectedPool.price, selectedPool.rewardsMaxSpread);
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px',
+                            background: inZone ? 'rgba(139,92,246,0.05)' : 'rgba(239,68,68,0.02)',
+                            border: inZone ? '1px dashed rgba(139,92,246,0.3)' : '1px solid transparent',
+                            borderRadius: 4, fontSize: '0.7rem' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--danger)', fontWeight: 600 }}>
+                              ${price.toFixed(3)}{inZone && <span style={{ fontSize: '0.5rem', color: 'var(--purple)', marginLeft: 4, fontWeight: 700 }}>[REWARD ZONE]</span>}
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{formatNumber(parseFloat(ask.size))}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px', background: 'var(--bg-layer-3)', borderRadius: 6, margin: '2px 0' }}>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', fontWeight: 600 }}>MIDPOINT:</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 800, color: 'var(--primary)' }}>
+                      ${selectedPool.price?.toFixed(3) || '0.500'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 100, overflowY: 'hidden', paddingTop: 6, borderTop: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-dim)', padding: '0 4px 4px', fontWeight: 600 }}>
+                      <span>BID PRICE (BID WALL)</span>
+                      <span>SIZE</span>
+                    </div>
+                    {orderbookLoading ? (
+                      <div className="skeleton" style={{ height: 36, borderRadius: 4 }}></div>
+                    ) : !orderbook?.bids?.length ? (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textAlign: 'center', padding: 6 }}>No active bids</span>
+                    ) : (
+                      orderbook.bids.slice(0, 5).map((bid, i) => {
+                        const price = parseFloat(bid.price);
+                        const inZone = isInRewardZone(price, selectedPool.price, selectedPool.rewardsMaxSpread);
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px',
+                            background: inZone ? 'rgba(139,92,246,0.05)' : 'rgba(16,185,129,0.02)',
+                            border: inZone ? '1px dashed rgba(139,92,246,0.3)' : '1px solid transparent',
+                            borderRadius: 4, fontSize: '0.7rem' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--success)', fontWeight: 600 }}>
+                              ${price.toFixed(3)}{inZone && <span style={{ fontSize: '0.5rem', color: 'var(--purple)', marginLeft: 4, fontWeight: 700 }}>[REWARD ZONE]</span>}
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{formatNumber(parseFloat(bid.size))}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <a href={`https://polymarket.com/event/${selectedPool.eventSlug || selectedPool.slug}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="btn btn-primary"
+                  style={{ justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', padding: '12px' }}>
+                  Open on Polymarket <ArrowUpRight size={14} />
+                </a>
+              </>
+            ) : (
+              <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)' }}>
+                <HelpCircle size={36} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                <p style={{ margin: 0, fontSize: '0.85rem' }}>Select a reward pool from the screener to view real-time orderbook analysis and safety metrics.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* LP Strategy Playbook */}
+      <div className="card animate-slide-up" style={{ padding: 32, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          <BookOpen size={20} style={{ color: 'var(--primary)' }} />
+          <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            LP Strategy Playbook
+          </h3>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Shield size={16} style={{ color: 'var(--success)' }} />
+              1. Order Book Depth (Cushion Wall) — The Critical Shield
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+              In LP Farming, your objective is for your limit orders to <strong>remain unfilled</strong>. If they fill, you hold a predictive position and take on market risk. 
+              To minimize this, place your orders behind heavy existing blocks of order depth (cushion walls). 
+              For example, if there is a 10,000 contract bid wall at $0.35, and your budget is $1,500, peg your bid behind it (at $0.34 or lower). 
+              The wall must be fully depleted before your order is hit, letting you farm rewards risk-free. 
+              <br/><br/>
+              <strong>The &quot;Cushion Wall&quot; metric in this terminal measures exactly this:</strong> it calculates the total depth of order volume standing between the active market price and your budget limit.
+            </p>
+          </div>
+
+          <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Clock size={16} style={{ color: 'var(--warning)' }} />
+              2. Live Events & Sports — The Volatility Trap
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+              During live matches or breaking geopolitical events, prices swing violently and order books can thin out in seconds. 
+              <strong> Never keep active LP orders open during sports events or breaking news events.</strong> Farming during off-peak hours (e.g., US late nights) is significantly safer as volume from active buyers is low. 
+              For news-driven markets, keep your budget low and monitor closely, or stick to quiet hours.
+            </p>
+          </div>
+
+          <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TrendingUp size={16} style={{ color: 'var(--primary)' }} />
+              3. The Range-Bound LP + Scalp Strategy
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+              Markets where the price consolidates within a stable range (e.g., $0.32 - $0.40) are absolute goldmines. 
+              By placing a limit bid near the lower support (e.g., $0.34) and a limit ask near resistance (e.g., $0.38), you earn continuous LP rewards while unfilled. 
+              If your limit does get filled, you buy low/sell high, pocketing trading profits on top of the passive farming yield.
+              <strong> This combines the benefits of passive rewards and active market making.</strong>
+            </p>
+          </div>
+
+          <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={16} style={{ color: 'var(--success)' }} />
+              4. Continuous Monitoring — Stay Alert
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+              The golden rule of LP farming is <strong>active monitoring</strong>. 
+              If the cushion wall in front of your order starts to thin out, immediately cancel your order and re-peg it to a safer depth. 
+              This terminal&apos;s real-time order book and cushion warnings are designed to make monitoring effortless, flashing warning alerts when the cushion is unsafe.
+              <br/><br/>
+              <strong>If you are new to LP farming, start with small budgets to gain experience before scaling up.</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

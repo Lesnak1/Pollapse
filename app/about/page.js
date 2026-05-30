@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, ArrowLeft, ArrowUpRight, Cpu, Layers, Activity, Brain, Target, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ArrowLeft, ArrowUpRight, Cpu, Layers, Activity, Brain, Target, ShieldCheck, Coins } from 'lucide-react';
 
 export default function AboutPage() {
   const modules = [
@@ -40,6 +40,12 @@ export default function AboutPage() {
       title: 'Cached Serverless Proxy Layer',
       description: 'Protects the terminal from Cloudflare rate limits and API throttling. Implements server-side in-memory Map caches with pre-defined TTL parameters (15s for orderbooks, 2min for markets, 5min for heavy correlations).',
       metrics: 'Cloudflare Throttling Safe · Sub-10ms UI Repaints'
+    },
+    {
+      icon: <Coins size={20} style={{ color: '#f59e0b' }} />,
+      title: 'LP Farm Strategy Terminal',
+      description: 'An institutional-grade terminal analyzing Polymarket CLOB V2 liquidity incentive pools. Fetches live rewards metadata and queries real-time order books to calculate dynamic cushion walls (bid depth protection), fill risk scoring, competition ratios, and personalized yield estimates based on user budget.',
+      metrics: 'Fill Risk Scoring · Cushion Wall Analysis · Live CLOB Depth'
     }
   ];
 

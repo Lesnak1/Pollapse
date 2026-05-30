@@ -1607,3 +1607,30 @@ input, select, textarea {
     stroke-dashoffset: 0;
   }
 }
+
+/* ============================
+   CUSTOM GLOWING CURSOR
+   ============================ */
+
+html.custom-cursor-active,
+html.custom-cursor-active * {
+  cursor: none !important;
+}
+
+.custom-cursor-ring.cursor-hovering {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.25) 0%, rgba(139, 92, 246, 0) 75%) !important;
+  width: 36px !important;
+  height: 36px !important;
+  top: -18px !important;
+  left: -18px !important;
+}
+
+.custom-cursor-dot.dot-hovering {
+  background-color: var(--purple) !important;
+  width: 7px !important;
+  height: 7px !important;
+  top: -3.5px !important;
+  left: -3.5px !important;
+}
+
+

@@ -2,6 +2,7 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { Inter, JetBrains_Mono } from 'next/font/google';
+import CustomCursor from '@/components/CustomCursor';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -34,6 +35,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
+        <CustomCursor />
         <div className="bg-mesh-glow">
           <div className="bg-sphere-1"></div>
           <div className="bg-sphere-2"></div>

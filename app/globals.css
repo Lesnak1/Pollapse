@@ -4,6 +4,8 @@
    ============================ */
 
 :root {
+  color-scheme: dark;
+  
   /* Background layers (deep space) */
   --bg-deepest: #050507;
   --bg-deep: #0a0b10;

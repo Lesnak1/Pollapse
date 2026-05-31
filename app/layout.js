@@ -35,6 +35,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <head>
+        <meta name="color-scheme" content="dark" />
+        <meta name="darkreader-lock" content="true" />
+      </head>
       <body>
         <CustomCursor />
         <div className="bg-mesh-glow">

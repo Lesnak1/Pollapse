@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: '/divergences', label: 'Divergences' },
   { href: '/thesis', label: 'Thesis Builder' },
   { href: '/about', label: 'About' },
+  { href: '/blog', label: 'Blog' },
 ];
 
 export default function Navbar() {

@@ -30,7 +30,7 @@ export default function LegalPage() {
 
       <div className="grid grid-3" style={{ gap: 32, alignItems: 'flex-start' }}>
         {/* Left 2 Columns: Main Legal Text */}
-        <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 32 }}>
+        <div className="col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
           
           {/* CRITICAL RISK DISCLAIMER */}
           <div className="card" style={{ padding: 32, border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.03)', borderRadius: 16 }}>

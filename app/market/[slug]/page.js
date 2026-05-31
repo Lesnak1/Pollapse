@@ -167,7 +167,7 @@ export default function MarketDetailPage({ params }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
           <div className="skeleton" style={{ height: 80, borderRadius: 16 }}></div>
           <div className="grid grid-3" style={{ gap: 32 }}>
-            <div className="skeleton" style={{ height: 350, gridColumn: 'span 2', borderRadius: 16 }}></div>
+            <div className="skeleton col-span-2" style={{ height: 350, borderRadius: 16 }}></div>
             <div className="skeleton" style={{ height: 350, borderRadius: 16 }}></div>
           </div>
         </div>
@@ -231,7 +231,7 @@ export default function MarketDetailPage({ params }) {
           {/* Lower Grid Workspaces */}
           <div className="grid grid-3" style={{ gap: 32 }}>
             {/* Chart Area: Left 2 Columns */}
-            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div className="card" style={{ padding: 32, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16 }}>
                 <h3 style={{ margin: '0 0 24px 0', fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Activity size={16} style={{ color: 'var(--primary)' }} /> Price Probability Timeline

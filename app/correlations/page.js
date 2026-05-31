@@ -141,7 +141,7 @@ export default function CorrelationsPage() {
       {/* Main Workspace Layout */}
       <div className="grid grid-3" style={{ gap: 32, alignItems: 'flex-start' }}>
         {/* Left 2 Columns: D3 Canvas or HeatMap */}
-        <div style={{ gridColumn: 'span 2' }}>
+        <div className="col-span-2">
           {/* Controls Bar */}
           <div
             style={{

@@ -259,7 +259,7 @@ export default function ThesisBuilderPage() {
 
       <div className="grid grid-3" style={{ gap: 32, alignItems: 'flex-start' }}>
         {/* Left 2 Columns: Builder Workspace */}
-        <div style={{ gridColumn: 'span 2' }}>
+        <div className="col-span-2">
           <div className="card" style={{ padding: 32, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16 }}>
             {/* Thesis Details */}
             <div style={{ display: 'flex', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>

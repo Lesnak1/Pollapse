@@ -76,7 +76,7 @@ export default function AboutPage() {
       {/* Narrative Split Section */}
       <div className="grid grid-3" style={{ gap: 32, alignItems: 'stretch', marginBottom: 56 }}>
         {/* Narratives: Left 2 Columns */}
-        <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div className="col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <div className="card" style={{ padding: 32, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: 16, color: 'var(--text-primary)' }}>
               The Philosophy Behind Pollapse

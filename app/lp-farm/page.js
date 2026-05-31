@@ -487,7 +487,7 @@ export default function LPFarmTerminal() {
       <div className="grid grid-12" style={{ gap: 24, alignItems: 'start', marginBottom: 32 }}>
         
         {/* LEFT: Screener (7 cols) */}
-        <div style={{ gridColumn: 'span 7', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="col-span-7" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           
           {/* Search & Filter Bar */}
           <div className="card" style={{ padding: 20, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
@@ -717,7 +717,7 @@ export default function LPFarmTerminal() {
         </div>
 
         {/* RIGHT: Live Order Book & Analysis (5 cols) */}
-        <div style={{ gridColumn: 'span 5', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="col-span-5" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div className="card animate-slide-up" style={{ padding: 24, background: 'var(--bg-layer-2)', border: '1px solid var(--border-color)', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
             {selectedPool && activeMetrics ? (
               <>

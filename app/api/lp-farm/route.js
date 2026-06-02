@@ -31,13 +31,16 @@ export async function GET(request) {
     const rawMarkets = await fetchAllActiveMarkets();
 
     // 3. Filter for active rewards-eligible markets
-    // Either they have explicit Gamma rewards settings or they are in the active incentives list
+    // A market must either:
+    // a) Be in the active incentives list (confirmed reward program), OR
+    // b) Have Gamma rewards settings AND holdingRewardsEnabled=true (active native rewards)
     const incSlugs = new Set(incentives.map(p => p.marketSlug.toLowerCase()));
 
     let rewardMarkets = rawMarkets.filter(m => {
-      const hasGammaRewards = (m.rewardsMaxSpread > 0 && m.rewardsMinSize > 0);
+      const hasGammaSettings = (m.rewardsMaxSpread > 0 && m.rewardsMinSize > 0);
+      const hasActiveRewards = m.holdingRewardsEnabled === true;
       const hasIncRewards = m.slug && incSlugs.has(m.slug.toLowerCase());
-      return (hasGammaRewards || hasIncRewards) && m.active && !m.closed;
+      return (hasIncRewards || (hasGammaSettings && hasActiveRewards)) && m.active && !m.closed;
     });
 
     // 4. Enrich reward markets
@@ -47,6 +50,7 @@ export async function GET(request) {
       
       // Determine daily reward pool size
       let dailyPool = 100; // Default $100/day
+      let rewardSource = 'estimated'; // 'incentives' | 'estimated'
       if (matchedInc && matchedInc.timePeriods && matchedInc.timePeriods.length > 0) {
         // Find the active or first pending period
         const activePeriod = matchedInc.timePeriods.find(tp => tp.status === 'active') || matchedInc.timePeriods[0];
@@ -54,6 +58,7 @@ export async function GET(request) {
           // If the pool is specified for a period (e.g. 7500 over 3 days), we scale to daily
           const durationDays = Math.max(1, Math.ceil((new Date(activePeriod.end) - new Date(activePeriod.start)) / 86400000));
           dailyPool = Math.round(activePeriod.rewardPool / durationDays);
+          rewardSource = 'incentives';
         }
       } else {
         // Estimate reward pool size for general markets based on volume
@@ -61,6 +66,8 @@ export async function GET(request) {
         if (vol > 1000000) dailyPool = 500;
         else if (vol > 250000) dailyPool = 250;
       }
+      // NaN safety check
+      if (!dailyPool || isNaN(dailyPool)) dailyPool = 100;
 
       // Extract CLOB token IDs
       let tokenIds = [];
@@ -99,6 +106,8 @@ export async function GET(request) {
         bestAsk,
         tokenIds,
         dailyPool,
+        rewardSource,
+        holdingRewardsEnabled: m.holdingRewardsEnabled === true,
         oneDayChange,
       };
     });

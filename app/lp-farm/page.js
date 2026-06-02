@@ -280,28 +280,50 @@ export default function LPFarmTerminal() {
     const relevantDepth = side === 'YES' ? bidDepthUSD : askDepthUSD;
     const cushionRatio = relevantDepth > 0 ? relevantDepth / userBudget : 0;
     
-    // Factor in volatility from sector
-    let sectorPenalty = 0;
-    if (pool.sector === 'sports') sectorPenalty = 40;
-    else if (pool.sector === 'geopolitics') sectorPenalty = 25;
-    else if (pool.sector === 'crypto') sectorPenalty = 15;
+    // CUSHION SAFETY (0-45): log-scale reward for thick order book walls
+    // The tweet strategy: "Order book hacmi iyi olmalı. Hacim azsa emir hemen dolar"
+    let cushionSafety = 0;
+    if (cushionRatio >= 10) cushionSafety = 45;
+    else if (cushionRatio >= 5) cushionSafety = 40;
+    else if (cushionRatio >= 2) cushionSafety = 30;
+    else if (cushionRatio >= 1) cushionSafety = 20;
+    else if (cushionRatio >= 0.5) cushionSafety = 10;
+    else cushionSafety = 0;
 
-    // Factor in days until resolution — closer = riskier
+    // TIME SAFETY (0-20): longer duration = safer passive farming
+    // Tweet strategy: avoid near-resolution markets, prefer long-duration for passive farming
     const daysLeft = getDaysUntilEnd(pool.endDate);
-    let timePenalty = 0;
-    if (daysLeft < 3) timePenalty = 35;
-    else if (daysLeft < 14) timePenalty = 15;
-    else if (daysLeft < 30) timePenalty = 5;
+    let timeSafety = 0;
+    if (daysLeft >= 90) timeSafety = 20;
+    else if (daysLeft >= 60) timeSafety = 15;
+    else if (daysLeft >= 30) timeSafety = 10;
+    else if (daysLeft >= 14) timeSafety = 5;
+    else if (daysLeft >= 7) timeSafety = 2;
+    else timeSafety = 0;
 
-    // Factor in 24h price change
-    const changePenalty = Math.min(30, (pool.oneDayChange || 0) * 300);
+    // SECTOR VOLATILITY PENALTY (time-aware for sports, flat for others)
+    // Öneri 1 insight: "Find markets (usually sports) that haven't started" — pre-match sports = safe
+    // Öneri 3 insight: "Remove orders 30 min before match" — close to match = dangerous
+    // Sports penalty tiers: pre-match (safe) → approaching → match day (extreme risk)
+    let sectorPenalty = 0;
+    if (pool.sector === 'sports') {
+      if (daysLeft >= 14) sectorPenalty = 10;      // pre-match: safe farming, highest rewards
+      else if (daysLeft >= 7) sectorPenalty = 20;   // approaching match week
+      else if (daysLeft >= 1) sectorPenalty = 35;   // match imminent, volatility spikes
+      else sectorPenalty = 50;                       // game day / live: extreme danger
+    } else if (pool.sector === 'geopolitics') {
+      sectorPenalty = 25;                            // news-driven, always volatile
+    } else if (pool.sector === 'crypto') {
+      sectorPenalty = 15;                            // volatile 24/7
+    }
 
-    // Base safety from cushion ratio (higher = safer, so subtract from penalty)
-    let baseSafety = Math.min(50, cushionRatio * 5);
+    // PRICE SWING PENALTY (0-25): volatile price bands increase fill probability
+    const changePenalty = Math.min(25, (pool.oneDayChange || 0) * 250);
 
-    // Final fill risk score: 0 = very safe, 100 = extremely dangerous
+    // FINAL FILL RISK: Base 60 (neutral) - safety factors + penalty factors, clamped 0-100
+    // 0 = extremely safe, 100 = extremely dangerous
     const fillRisk = Math.min(100, Math.max(0, Math.round(
-      100 - baseSafety + sectorPenalty + timePenalty + changePenalty
+      60 - cushionSafety - timeSafety + sectorPenalty + changePenalty
     )));
 
     let label, color, emoji;
@@ -322,8 +344,13 @@ export default function LPFarmTerminal() {
   };
 
   // 3. Estimated Reward Share
+  // Uses volume-based liquidity estimation for pools without real CLOB data
+  // Formula: estimated_liquidity = max(10k, min(100k, volume * 0.1))
+  // This prevents unknown pools from appearing artificially more profitable than known ones
   const getRewardShare = (pool, userBudget) => {
-    const totalLiq = pool.liquidity || 50000;
+    const totalLiq = pool.liquidity > 0
+      ? pool.liquidity
+      : Math.max(10000, Math.min(100000, Math.round((pool.volume || 0) * 0.1)));
     const sharePercent = (userBudget / (totalLiq + userBudget)) * 100;
     const dailyReward = (sharePercent / 100) * (pool.dailyPool || 100);
     const monthlyReward = dailyReward * 30;
@@ -350,10 +377,14 @@ export default function LPFarmTerminal() {
     const safetyScore = 100 - fillRisk.score;
     
     // Yield attractiveness (25% weight)
-    const yieldScore = Math.min(100, reward.dailyROI * 500);
+    const yieldScore = Math.min(100, reward.dailyROI * 200);
     
     // Competition advantage (20% weight)
-    const competitionRatio = pool.liquidity > 0 ? userBudget / pool.liquidity : 1;
+    // Uses same volume-based estimate as getRewardShare for consistency
+    const estLiq = pool.liquidity > 0
+      ? pool.liquidity
+      : Math.max(10000, Math.min(100000, Math.round((pool.volume || 0) * 0.1)));
+    const competitionRatio = userBudget / estLiq;
     const compScore = Math.min(100, competitionRatio * 1000);
     
     // Duration safety (15% weight)
@@ -1424,21 +1455,37 @@ export default function LPFarmTerminal() {
 
           <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Zap size={16} style={{ color: 'var(--warning)' }} />
+              3. Pre-Match Sports — The Hidden Goldmine
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+              Contrary to popular belief, sports markets that <strong>haven&apos;t started yet</strong> are among the safest and most profitable LP farms. 
+              These markets often carry $500–$1,000+/day in rewards with thin competition before the match begins, offering 500%+ APRs for early farmers. 
+              As game time approaches, activity and volatility spike — <strong>cancel all LP orders at least 30 minutes before kickoff</strong> to avoid sudden fills. 
+              During the match itself, farming is practically pointless due to extreme price swings, though brief breaks (halftime, timeouts) can offer very short safe windows for experienced farmers.
+              <br/><br/>
+              <strong>The SafeFarm engine automatically distinguishes between pre-match (low penalty) and game-day (extreme penalty) sports markets using time-to-resolution as a proxy.</strong>
+            </p>
+          </div>
+
+          <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <TrendingUp size={16} style={{ color: 'var(--primary)' }} />
-              3. The Range-Bound LP + Scalp Strategy
+              4. The Range-Bound LP + Scalp Strategy
             </h4>
             <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
               Markets where the price consolidates within a stable range (e.g., $0.32 - $0.40) are absolute goldmines. 
               By placing a limit bid near the lower support (e.g., $0.34) and a limit ask near resistance (e.g., $0.38), you earn continuous LP rewards while unfilled. 
-              If your limit does get filled, you buy low/sell high, pocketing trading profits on top of the passive farming yield.
-              <strong> This combines the benefits of passive rewards and active market making.</strong>
+              If your limit does get filled, you buy low/sell high, pocketing trading profits <strong>plus Polymarket&apos;s maker rebates</strong> (negative fees paid to liquidity providers on filled orders) on top of the passive farming yield.
+              Many successful LP farmers report that maker rebates alone can add 10-20% extra return on filled positions.
+              <strong> This combines the benefits of passive rewards, active market making, and protocol-level fee rebates.</strong>
             </p>
           </div>
 
           <div style={{ padding: 18, background: 'var(--bg-layer-3)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <CheckCircle2 size={16} style={{ color: 'var(--success)' }} />
-              4. Continuous Monitoring — Stay Alert
+              5. Continuous Monitoring — Stay Alert
             </h4>
             <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7 }}>
               The golden rule of LP farming is <strong>active monitoring</strong>. 

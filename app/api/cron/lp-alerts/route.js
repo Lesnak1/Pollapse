@@ -32,22 +32,39 @@ const getFillRisk = (pool, userBudget, side = 'YES') => {
   const relevantDepth = side === 'YES' ? bidDepthUSD : askDepthUSD;
   const cushionRatio = relevantDepth > 0 ? relevantDepth / userBudget : 0;
   
-  let sectorPenalty = 0;
-  if (pool.sector === 'sports') sectorPenalty = 40;
-  else if (pool.sector === 'geopolitics') sectorPenalty = 25;
-  else if (pool.sector === 'crypto') sectorPenalty = 15;
+  let cushionSafety = 0;
+  if (cushionRatio >= 10) cushionSafety = 45;
+  else if (cushionRatio >= 5) cushionSafety = 40;
+  else if (cushionRatio >= 2) cushionSafety = 30;
+  else if (cushionRatio >= 1) cushionSafety = 20;
+  else if (cushionRatio >= 0.5) cushionSafety = 10;
+  else cushionSafety = 0;
 
   const daysLeft = getDaysUntilEnd(pool.endDate);
-  let timePenalty = 0;
-  if (daysLeft < 3) timePenalty = 35;
-  else if (daysLeft < 14) timePenalty = 15;
-  else if (daysLeft < 30) timePenalty = 5;
+  let timeSafety = 0;
+  if (daysLeft >= 90) timeSafety = 20;
+  else if (daysLeft >= 60) timeSafety = 15;
+  else if (daysLeft >= 30) timeSafety = 10;
+  else if (daysLeft >= 14) timeSafety = 5;
+  else if (daysLeft >= 7) timeSafety = 2;
+  else timeSafety = 0;
 
-  const changePenalty = Math.min(30, (pool.oneDayChange || 0) * 300);
-  let baseSafety = Math.min(50, cushionRatio * 5);
+  let sectorPenalty = 0;
+  if (pool.sector === 'sports') {
+    if (daysLeft >= 14) sectorPenalty = 10;
+    else if (daysLeft >= 7) sectorPenalty = 20;
+    else if (daysLeft >= 1) sectorPenalty = 35;
+    else sectorPenalty = 50;
+  } else if (pool.sector === 'geopolitics') {
+    sectorPenalty = 25;
+  } else if (pool.sector === 'crypto') {
+    sectorPenalty = 15;
+  }
+
+  const changePenalty = Math.min(25, (pool.oneDayChange || 0) * 250);
 
   const fillRisk = Math.min(100, Math.max(0, Math.round(
-    100 - baseSafety + sectorPenalty + timePenalty + changePenalty
+    60 - cushionSafety - timeSafety + sectorPenalty + changePenalty
   )));
 
   let label, color, emoji;
@@ -65,7 +82,9 @@ const getFillRisk = (pool, userBudget, side = 'YES') => {
 };
 
 const getRewardShare = (pool, userBudget) => {
-  const totalLiq = pool.liquidity || 50000;
+  const totalLiq = pool.liquidity > 0
+    ? pool.liquidity
+    : Math.max(10000, Math.min(100000, Math.round((pool.volume || 0) * 0.1)));
   const sharePercent = (userBudget / (totalLiq + userBudget)) * 100;
   const dailyReward = (sharePercent / 100) * (pool.dailyPool || 100);
   const dailyROI = userBudget > 0 ? (dailyReward / userBudget) * 100 : 0;
@@ -85,8 +104,11 @@ const getLPScore = (pool, userBudget, side = 'YES') => {
   const daysLeft = getDaysUntilEnd(pool.endDate);
   
   const safetyScore = 100 - fillRisk.score;
-  const yieldScore = Math.min(100, reward.dailyROI * 500);
-  const competitionRatio = pool.liquidity > 0 ? userBudget / pool.liquidity : 1;
+  const yieldScore = Math.min(100, reward.dailyROI * 200);
+  const estLiq = pool.liquidity > 0
+    ? pool.liquidity
+    : Math.max(10000, Math.min(100000, Math.round((pool.volume || 0) * 0.1)));
+  const competitionRatio = userBudget / estLiq;
   const compScore = Math.min(100, competitionRatio * 1000);
   const durationScore = Math.min(100, daysLeft * 1.5);
 

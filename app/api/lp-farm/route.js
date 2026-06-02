@@ -6,6 +6,105 @@ import cache from '@/lib/cache';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// ===========================
+// OFFICIAL POLYMARKET APRIL 2026 SPORTS REWARDS (from docs.polymarket.com)
+// Per-game total rewards, split Pre/Live. Source: liquidity-rewards.md
+// ===========================
+const SPORTS_REWARDS = {
+  // Soccer (Pre = daily estimate for pre-game, Live = game day pool)
+  'English Premier League': { keywords: ['premier league', 'epl'], pre: 2800, live: 7200 },
+  'La Liga': { keywords: ['la liga'], pre: 900, live: 2400 },
+  'Serie A': { keywords: ['serie a', 'seriea'], pre: 900, live: 2400 },
+  'Bundesliga': { keywords: ['bundesliga'], pre: 850, live: 2150 },
+  'Ligue 1': { keywords: ['ligue 1', 'ligue1'], pre: 600, live: 1500 },
+  'Champions League': { keywords: ['champions league', 'ucl'], pre: 6750, live: 17250 },
+  'Europa League': { keywords: ['europa league', 'uel'], pre: 1350, live: 3400 },
+  'Conference League': { keywords: ['conference league'], pre: 400, live: 1100 },
+  'MLS': { keywords: ['mls', 'major league soccer'], pre: 450, live: 1200 },
+  'Liga MX': { keywords: ['liga mx', 'ligamx'], pre: 450, live: 1200 },
+  'Copa Libertadores': { keywords: ['copa libertadores', 'libertadores'], pre: 750, live: 1900 },
+  'Copa Sudamericana': { keywords: ['copa sudamericana', 'sudamericana'], pre: 225, live: 575 },
+  'Argentine Primera': { keywords: ['argentine primera', 'argentina premier division'], pre: 150, live: 400 },
+  'Brasileirao': { keywords: ['brasileirao', 'brazilian serie a'], pre: 150, live: 400 },
+  'Turkish Super Lig': { keywords: ['turkish super lig', 'super lig', 'süper lig'], pre: 550, live: 1450 },
+  'Eredivisie': { keywords: ['eredivisie'], pre: 250, live: 650 },
+  'Liga Portugal': { keywords: ['liga portugal', 'portuguese'], pre: 200, live: 550 },
+  'Championship EFL': { keywords: ['efl championship', 'championship efl'], pre: 150, live: 350 },
+  'Saudi Pro League': { keywords: ['saudi pro league', 'saudi league'], pre: 450, live: 1200 },
+  'J1 League': { keywords: ['j1 league', 'j.league'], pre: 300, live: 800 },
+  'K League': { keywords: ['k league', 'kleague'], pre: 200, live: 550 },
+  'FA Cup': { keywords: ['fa cup'], pre: 850, live: 2000 },
+
+  // Basketball
+  'NBA': { keywords: ['nba'], pre: 2150, live: 5550 },
+  'EuroLeague': { keywords: ['euroleague', 'euro league'], pre: 150, live: 350 },
+
+  // Baseball
+  'MLB': { keywords: ['mlb', 'major league baseball'], pre: 465, live: 1185 },
+
+  // Hockey
+  'NHL': { keywords: ['nhl'], pre: 400, live: 1100 },
+
+  // Tennis
+  'ATP Tour': { keywords: ['atp', 'atp tour'], pre: 450, live: 1000 },
+  'WTA Tour': { keywords: ['wta', 'wta tour'], pre: 300, live: 750 },
+
+  // UFC/MMA
+  'UFC Main Card': { keywords: ['ufc main', 'ufc fight night'], pre: 1200, live: 3050 },
+  'UFC Prelims': { keywords: ['ufc prelim', 'ufc early prelim'], pre: 250, live: 700 },
+
+  // Cricket
+  'IPL': { keywords: ['ipl', 'indian premier league'], pre: 1250, live: 3250 },
+
+  // Esports
+  'CS2 Tier A': { keywords: ['cs2 major', 'esl pro league', 'blast premier', 'blast open'], pre: 1550, live: 3950 },
+  'CS2 Tier C': { keywords: ['cs2 qualifier', 'cs2 regional'], pre: 150, live: 350 },
+  'LoL Tier A': { keywords: ['lck', 'lpl', 'lec playoffs', 'league of legends worlds'], pre: 1550, live: 3950 },
+  'LoL Tier C': { keywords: ['league of legends erl', 'lol regional league'], pre: 150, live: 350 },
+  'Dota 2 Tier A': { keywords: ['dota 2 dpc', 'dota 2 major', 'the international'], pre: 1000, live: 2500 },
+  'Valorant Tier A': { keywords: ['vct', 'valorant champions', 'valorant masters'], pre: 1000, live: 2500 },
+
+  // Generic soccer fallbacks
+  'Soccer Major League': { keywords: ['soccer', 'football', 'fifa world cup', 'world cup', 'fifa', 'uefa'], pre: 450, live: 1200 },
+
+  // Generic sports fallbacks
+  'Generic Sports': { keywords: ['nfl', 'ncaa', 'rugby', 'chess', 'cricket', 'lacrosse', 'table tennis', 'snooker', 'darts', 'cycling', 'swimming', 'boxing', 'golf', 'pga', 'formula 1', 'f1', 'indycar', 'nascar'], pre: 200, live: 500 },
+};
+
+// ===========================
+// SPORTS LEAGUE CLASSIFIER
+// Matches market question/event slug against known league keywords
+// ===========================
+function classifySportsLeague(question, eventSlug) {
+  const text = `${question || ''} ${eventSlug || ''}`.toLowerCase();
+  for (const [league, data] of Object.entries(SPORTS_REWARDS)) {
+    for (const kw of data.keywords) {
+      if (text.includes(kw)) return league;
+    }
+  }
+  return null;
+}
+
+// ===========================
+// SPORTS DAILY POOL CALCULATOR
+// Uses official reward table. Pre-game amount is the baseline daily estimate.
+// On game day (daysLeft <= 1), uses the live reward.
+// ===========================
+function getSportsDailyPool(question, eventSlug, endDate) {
+  const league = classifySportsLeague(question, eventSlug);
+  if (!league) return null;
+  const rewards = SPORTS_REWARDS[league];
+  if (!rewards) return null;
+
+  // If market resolves within 1 day, it's game day → use live reward
+  const now = new Date();
+  const end = new Date(endDate);
+  const daysLeft = endDate ? Math.max(0, Math.ceil((end - now) / 86400000)) : 999;
+
+  if (daysLeft <= 1) return rewards.live;
+  return rewards.pre;
+}
+
 export async function GET(request) {
   try {
     const cacheKey = 'lp-farm-pools';
@@ -31,9 +130,6 @@ export async function GET(request) {
     const rawMarkets = await fetchAllActiveMarkets();
 
     // 3. Filter for active rewards-eligible markets
-    // A market must either:
-    // a) Be in the active incentives list (confirmed reward program), OR
-    // b) Have Gamma rewards settings AND holdingRewardsEnabled=true (active native rewards)
     const incSlugs = new Set(incentives.map(p => p.marketSlug.toLowerCase()));
 
     let rewardMarkets = rawMarkets.filter(m => {
@@ -47,25 +143,36 @@ export async function GET(request) {
     const enriched = rewardMarkets.map(m => {
       const slugLower = (m.slug || '').toLowerCase();
       const matchedInc = incentives.find(p => p.marketSlug.toLowerCase() === slugLower);
-      
+
       // Determine daily reward pool size
-      let dailyPool = 100; // Default $100/day
-      let rewardSource = 'estimated'; // 'incentives' | 'estimated'
+      let dailyPool = 100;
+      let rewardSource = 'estimated';
+
       if (matchedInc && matchedInc.timePeriods && matchedInc.timePeriods.length > 0) {
-        // Find the active or first pending period
+        // CONFIRMED: Incentives API has exact reward data
         const activePeriod = matchedInc.timePeriods.find(tp => tp.status === 'active') || matchedInc.timePeriods[0];
         if (activePeriod && activePeriod.rewardPool) {
-          // If the pool is specified for a period (e.g. 7500 over 3 days), we scale to daily
           const durationDays = Math.max(1, Math.ceil((new Date(activePeriod.end) - new Date(activePeriod.start)) / 86400000));
           dailyPool = Math.round(activePeriod.rewardPool / durationDays);
           rewardSource = 'incentives';
         }
       } else {
-        // Estimate reward pool size for general markets based on volume
-        const vol = extractVolume(m);
-        if (vol > 1000000) dailyPool = 500;
-        else if (vol > 250000) dailyPool = 250;
+        const endDate = m.end_date_iso || m.endDate;
+        const eventSlug = extractEventSlug(m);
+
+        // OFFICIAL: Check sports reward table first (independent of sector classification)
+        const sportsPool = getSportsDailyPool(m.question, eventSlug, endDate);
+        if (sportsPool) {
+          dailyPool = sportsPool;
+          rewardSource = 'official';
+        } else {
+          // Volume-based estimation for non-sports markets
+          const vol = extractVolume(m);
+          if (vol > 1000000) dailyPool = 500;
+          else if (vol > 250000) dailyPool = 250;
+        }
       }
+
       // NaN safety check
       if (!dailyPool || isNaN(dailyPool)) dailyPool = 100;
 
@@ -86,7 +193,7 @@ export async function GET(request) {
 
       // Extract 24hr price change for volatility calculations
       const oneDayChange = m.oneDayPriceChange ? Math.abs(parseFloat(m.oneDayPriceChange)) : 0;
-      
+
       return {
         id: m.id || m.condition_id,
         conditionId: m.condition_id,
@@ -108,6 +215,7 @@ export async function GET(request) {
         dailyPool,
         rewardSource,
         holdingRewardsEnabled: m.holdingRewardsEnabled === true,
+        feesEnabled: m.feesEnabled === true,
         oneDayChange,
       };
     });
@@ -121,7 +229,7 @@ export async function GET(request) {
       timestamp: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, result, 30000); // 30s cache
+    cache.set(cacheKey, result, 30000);
     return NextResponse.json(result);
   } catch (error) {
     console.error('LP Farm pools API error:', error);

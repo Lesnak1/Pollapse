@@ -751,10 +751,20 @@ export default function LPFarmTerminal() {
                                 {truncate(pool.question, 40)}
                                 <ArrowUpRight size={11} style={{ opacity: 0.4, transition: 'opacity 0.15s' }} />
                               </a>
-                              <div style={{ display: 'flex', gap: 6, fontSize: '0.6rem', alignItems: 'center' }}>
+                               <div style={{ display: 'flex', gap: 6, fontSize: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <span className="badge" style={{ background: 'var(--bg-layer-3)', color: 'var(--text-dim)', padding: '1px 5px' }}>
                                   {pool.sector.toUpperCase()}
                                 </span>
+                                {pool.rewardSource === 'official' && (
+                                  <span className="badge" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--success)', padding: '1px 5px', fontWeight: 600 }}>
+                                    Official
+                                  </span>
+                                )}
+                                {pool.feesEnabled && (
+                                  <span className="badge" style={{ background: 'rgba(139,92,246,0.10)', color: 'var(--purple)', padding: '1px 5px', fontSize: '0.55rem' }}>
+                                    Rebates
+                                  </span>
+                                )}
                                 <span style={{ color: 'var(--text-dim)' }}>
                                   Spread: {pool.rewardsMaxSpread}% · Min: {pool.rewardsMinSize}
                                 </span>
@@ -992,6 +1002,35 @@ export default function LPFarmTerminal() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Reward Source + Maker Rebates */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                      {selectedPool.rewardSource === 'official' && (
+                        <span className="badge" style={{ background: 'rgba(16,185,129,0.10)', color: 'var(--success)', padding: '3px 8px', fontSize: '0.58rem', fontWeight: 600 }}>
+                          ✅ Official Rewards
+                        </span>
+                      )}
+                      {selectedPool.rewardSource === 'estimated' && (
+                        <span className="badge" style={{ background: 'rgba(245,158,11,0.10)', color: 'var(--warning)', padding: '3px 8px', fontSize: '0.58rem' }}>
+                          ⚠️ Estimated Rewards
+                        </span>
+                      )}
+                      {selectedPool.feesEnabled && (
+                        <span className="badge" style={{ background: 'rgba(139,92,246,0.10)', color: 'var(--purple)', padding: '3px 8px', fontSize: '0.58rem', fontWeight: 600 }}>
+                          💰 Maker Rebates Eligible
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Min $1 Payout Warning (Polymarket docs: minimum reward payout is $1) */}
+                    {activeMetrics.eligibility.eligible && activeMetrics.rewardShare.dailyReward < 1 && (
+                      <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid var(--danger)', borderRadius: 8, marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <AlertTriangle size={14} style={{ color: 'var(--danger)', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-dim)', lineHeight: 1.3 }}>
+                          <strong>Below $1 minimum payout.</strong> Estimated ${activeMetrics.rewardShare.dailyReward.toFixed(2)}/day is below Polymarket's $1 minimum. Increase budget or find a smaller pool.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Safety Alerts */}
                     {/* 1. Spread Qualification Warning */}

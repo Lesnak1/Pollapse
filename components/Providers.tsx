@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { polygon } from 'viem/chains';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -18,12 +19,13 @@ export default function Providers({ children }: ProvidersProps) {
           theme: 'dark',
           accentColor: '#3b82f6',
         },
+        supportedChains: [polygon],
+        defaultChain: polygon,
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'all-users',
           },
         },
-
       }}
     >
       {children}

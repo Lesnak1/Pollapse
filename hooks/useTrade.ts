@@ -130,16 +130,29 @@ export function useTrade(): TradeState {
         contracts.exchangeV2,
         contracts.negRiskExchangeV2,
         contracts.negRiskAdapter
-      ].filter(Boolean);
+      ];
+
+      // Sanity check config spenders
+      spenders.forEach((spender, i) => {
+        if (!spender) {
+          console.warn(`Spender config at index ${i} is undefined. Check contractConfig mappings!`);
+          addLog(`⚠️ Warning: Spender config at index ${i} is undefined.`);
+        }
+      });
+
+      const validSpenders = spenders.filter(Boolean);
 
       const calls: any[] = [];
       const erc20Abi = parseAbi([
         'function approve(address spender, uint256 amount) public returns (bool)'
       ]);
+      const erc1155Abi = parseAbi([
+        'function setApprovalForAll(address operator, bool approved) public'
+      ]);
 
       const maxUint = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
 
-      for (const spender of spenders) {
+      for (const spender of validSpenders) {
         if (contracts.collateral) {
           calls.push({
             target: contracts.collateral,
@@ -156,9 +169,9 @@ export function useTrade(): TradeState {
             target: contracts.conditionalTokens,
             value: '0',
             data: encodeFunctionData({
-              abi: erc20Abi,
-              functionName: 'approve',
-              args: [spender as `0x${string}`, maxUint],
+              abi: erc1155Abi,
+              functionName: 'setApprovalForAll',
+              args: [spender as `0x${string}`, true],
             }),
           });
         }
@@ -238,6 +251,11 @@ export function useTrade(): TradeState {
 
       const client = getClientClobClient(signer, l2Creds);
       
+      addLog('Resolving market metadata (tick size & neg risk)...');
+      const tickSize = (await client.getTickSize(params.tokenId)) as any;
+      const negRisk = await client.getNegRisk(params.tokenId);
+      addLog(`Resolved: tickSize=${tickSize}, negRisk=${negRisk}`);
+      
       let response;
       if (params.orderType === 'limit') {
         addLog(`Signing & Posting Limit ${params.side} order: ${params.size} contracts at $${params.price}...`);
@@ -249,7 +267,7 @@ export function useTrade(): TradeState {
             side: params.side,
             expiration: Math.floor(Date.now() / 1000) + 3600,
           },
-          { tickSize: '0.001', negRisk: false },
+          { tickSize, negRisk },
           OrderType.GTC
         );
       } else {
@@ -260,7 +278,7 @@ export function useTrade(): TradeState {
             side: params.side,
             amount: Number(params.size),
           } as any,
-          { tickSize: '0.001', negRisk: false },
+          { tickSize, negRisk },
           OrderType.FOK
         );
       }

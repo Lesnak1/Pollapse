@@ -39,17 +39,8 @@ export function useWallet(): WalletState {
     if (!embeddedWallet) return null;
     try {
       const provider = await embeddedWallet.getEthereumProvider();
-      // BrowserProvider works for Ethers v6. For v5 it is providers.Web3Provider.
-      // Let's support both V5 and V6 by dynamically resolving.
-      const ethers = require('ethers');
-      if (ethers.BrowserProvider) {
-        const browserProvider = new ethers.BrowserProvider(provider);
-        return await browserProvider.getSigner();
-      } else if (ethers.providers && ethers.providers.Web3Provider) {
-        const web3Provider = new ethers.providers.Web3Provider(provider);
-        return web3Provider.getSigner();
-      }
-      return null;
+      const browserProvider = new BrowserProvider(provider);
+      return await browserProvider.getSigner();
     } catch (e) {
       console.error('Failed to get signer from Privy wallet:', e);
       return null;

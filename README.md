@@ -1,6 +1,6 @@
 # 🔮 Pollapse — Cross-Market Intelligence & Smart Trading Terminal
 
-> The **Bloomberg Terminal of Prediction Markets**. Spot hidden correlations, calculate sector sentiments, scan convergence signals, and build multi-market theses on top of the Polymarket CLOB V2.
+> The **Bloomberg Terminal of Prediction Markets**. Spot hidden correlations, calculate sector sentiments, scan convergence signals, and build multi-market theses on top of the Polymarket CLOB V2 with gasless direct execution.
 
 ---
 
@@ -11,12 +11,13 @@
 * **⚡ Live Divergence (Alpha) Scanner:** Automatically identifies price inefficiencies between highly correlated contracts and generates convergence trade hypotheses (e.g., *Buy lagging YES / Buy overpriced NO*).
 * **🧠 Portfolio Thesis Workspace:** Model complex, multi-legged macro bets. Scans legs for directional concentration dependencies and alerts you of correlation redundancies to preserve capital efficiency.
 * **💹 Dynamic Asset detailed Workspaces:** Renders detailed spec sheets, liquidity depths, and responsive vector price timelines for individual Polymarket event slugs.
+* **⚡ One-Click Gasless Execution:** Directly onboard via Privy, deploy a dedicated smart contract wallet (Gnosis Safe proxy) gaslessly, batch spending authorizations, and execute attributed orders directly from the terminal.
 
 ---
 
 ## 🏗️ System Architecture & Math
 
-Pollapse fetches price coordinates and volume tuples directly from Polymarket's public Gamma & CLOB endpoints serverless and caches them utilizing in-memory TTL buffers.
+Pollapse fetches price coordinates and volume tuples directly from Polymarket's public Gamma & CLOB endpoints serverless and caches them utilizing shared Vercel KV Redis caches with local in-memory fallbacks.
 
 ```
                    +---------------------------+
@@ -26,7 +27,7 @@ Pollapse fetches price coordinates and volume tuples directly from Polymarket's 
                                  |
                                  v
                    +-------------+-------------+
-                   |  lib/polymarket.js Client |
+                   |  lib/polymarket.ts Client |
                    +-------------+-------------+
                                  |
                                  v
@@ -59,6 +60,32 @@ $$\text{Sector Sentiment Index} = \frac{\sum (Price_i \times Weight_i)}{\sum Wei
 
 ---
 
+## ⛓️ Builder Code Integration & Safe Onboarding
+
+To qualify for the **Polymarket Builders Program**, all trades routed through Pollapse are attributed to our registered builder code (`0xdc821268...`). Volume attribution is executed client-side to maintain non-custodial integrity.
+
+### 1. Attributed Order Signing Flow
+The matching engine requires the builder code to be embedded directly inside the signed order payload (onchain `builder` field). Attaching it post-signature invalidates the user's L1 cryptographic signature.
+
+```
+[User Browser]
+   |
+   |-- 1. Initialize ClobClient with NEXT_PUBLIC_POLY_BUILDER_CODE
+   |-- 2. Construct Order Struct (builder code embedded in 'builder' field)
+   |-- 3. User signs EIP-712 typed order payload with Privy EOA Wallet
+   |-- 4. Post raw signed order directly to Polymarket CLOB operator endpoint
+   v
+[Polymarket CLOB Engine] (Volume attributed to Pollapse automatically)
+```
+
+### 2. Gasless Safe Provisioning Pipeline
+1. **Authentication:** Privy authenticates users via email/social and provisions a non-custodial EOA wallet.
+2. **Safe Derivation & Deploy:** Deterministically derives the user's Safe/Deposit proxy wallet and deploys it gaslessly using `@polymarket/builder-relayer-client` (`POLY_1271` signatures).
+3. **Batch Authorization:** Token approvals for pUSD (collateral) and outcome contract tokens (CTF, CTF Exchange, Neg Risk Exchange, Neg Risk Adapter) are packed into a single signature payload and dispatched through the relayer.
+4. **L2 Keys Derivation:** Derives L2 trading API credentials (`createOrDeriveApiKey()`) and keeps them transiently in React memory state (never in `localStorage`).
+
+---
+
 ## 🛠️ Local Installation & Development
 
 ### Prerequisites
@@ -73,21 +100,23 @@ $$\text{Sector Sentiment Index} = \frac{\sum (Price_i \times Weight_i)}{\sum Wei
    ```
 2. **Install Dependencies:**
    ```bash
-   npm install
+   npm install --legacy-peer-deps
    ```
-3. **Start the Development Server:**
+3. **Configure Environment Variables:**
+   Copy `.env.example` to `.env.local` and configure your keys.
+4. **Start the Development Server:**
    ```bash
    npm run dev
    ```
-4. **Access the Terminal:**
+5. **Access the Terminal:**
    Open [http://localhost:3000](http://localhost:3000) on your browser.
 
 ---
 
 ## 🗺️ Protocol Roadmap
 
-- [x] **Phase 1 (V1.0 MVP):** Serverless proxy caching layers, logarithmic weighting gauge indices, interactive D3.js physics web cluster graphs, alpha divergence scanner logs, and portfolio thesis check boxes.
-- [ ] **Phase 2 (Upcoming):** On-chain wallet integrations (Metamask, WalletConnect, Coinbase Wallet) allowing limit/market orders directly via Pollapse, collecting custom developer routing fees.
+- [x] **Phase 1 (V1.0 MVP):** Serverless proxy caching layers, logarithmic weighting indices, interactive D3.js physics web cluster graphs, alpha divergence scanner logs, and portfolio thesis workspace.
+- [x] **Phase 2 (V2.0 Authenticated Gasless Trading):** On-chain Privy login, gasless safe provisioning, batch approvals, L2 keys, and client-side pre-signature attributed trading sandbox.
 - [ ] **Phase 3 (Future):** Autonomous AI agents scanner integration to formulate and execute complex convergence trades instantly.
 
 ---
@@ -100,7 +129,7 @@ Pollapse is solely an informational, statistical analytics terminal. We are not 
 
 ## 🤝 Contribution & Community Contacts
 
-We welcome developer contributions! If you have suggestions, optimizations, or want to contribute to the direct wallet routing layer in Phase 2, connect with us:
+We welcome developer contributions! If you have suggestions or optimizations, connect with us:
 
 * **Lead Architect:** **Leknax** 
   * GitHub: [@Lesnak1](https://github.com/Lesnak1)

@@ -3,7 +3,7 @@
  * Formatting, colors, and helpers
  */
 
-export function formatCurrency(value) {
+export function formatCurrency(value: number | string | null | undefined): string {
   if (value == null) return '$0';
   const num = Number(value);
   if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
@@ -12,12 +12,12 @@ export function formatCurrency(value) {
   return `$${num.toFixed(2)}`;
 }
 
-export function formatPercent(value, decimals = 1) {
+export function formatPercent(value: number | string | null | undefined, decimals = 1): string {
   if (value == null) return '0%';
   return `${(Number(value) * 100).toFixed(decimals)}%`;
 }
 
-export function formatNumber(value) {
+export function formatNumber(value: number | string | null | undefined): string {
   if (value == null) return '0';
   const num = Number(value);
   if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
@@ -26,15 +26,15 @@ export function formatNumber(value) {
   return num.toLocaleString();
 }
 
-export function formatProbability(price) {
+export function formatProbability(price: number | string | null | undefined): string {
   if (price == null) return '—';
   return `${(Number(price) * 100).toFixed(1)}%`;
 }
 
-export function timeAgo(dateString) {
+export function timeAgo(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
-  const seconds = Math.floor((now - date) / 1000);
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   if (seconds < 60) return 'just now';
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
@@ -43,7 +43,7 @@ export function timeAgo(dateString) {
   return date.toLocaleDateString();
 }
 
-export function formatDate(dateString) {
+export function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -51,8 +51,17 @@ export function formatDate(dateString) {
   });
 }
 
+export interface SectorInfo {
+  name: string;
+  icon: string;
+  color: string;
+  gradient: string;
+  keywords: string[];
+  tags: string[];
+}
+
 // Sector definitions
-export const SECTORS = {
+export const SECTORS: Record<string, SectorInfo> = {
   politics: {
     name: 'Politics',
     icon: '🏛️',
@@ -103,8 +112,14 @@ export const SECTORS = {
   },
 };
 
-export function classifyMarket(market) {
-  const text = `${market.question || ''} ${market.description || ''} ${(market.tags || []).join(' ')}`.toLowerCase();
+export interface MarketDataInput {
+  question?: string;
+  description?: string;
+  tags?: (string | { slug?: string; label?: string })[];
+}
+
+export function classifyMarket(market: MarketDataInput): string {
+  const text = `${market.question || ''} ${market.description || ''} ${(market.tags || []).map(t => typeof t === 'string' ? t : t.slug || t.label || '').join(' ')}`.toLowerCase();
   const marketTags = (market.tags || []).map(t => (typeof t === 'string' ? t : t.slug || t.label || '').toLowerCase());
 
   let bestSector = 'other';
@@ -129,29 +144,34 @@ export function classifyMarket(market) {
   return bestScore > 0 ? bestSector : 'other';
 }
 
-export function getSectorColor(sector) {
+export function getSectorColor(sector: string): string {
   return SECTORS[sector]?.color || '#64748b';
 }
 
-export function getSectorIcon(sector) {
+export function getSectorIcon(sector: string): string {
   return SECTORS[sector]?.icon || '📊';
 }
 
-export function getSectorGradient(sector) {
+export function getSectorGradient(sector: string): string {
   return SECTORS[sector]?.gradient || 'linear-gradient(135deg, #475569, #64748b)';
 }
 
-export function generatePolymarketUrl(market) {
+export interface MarketSlugInput {
+  slug?: string;
+  market_slug?: string;
+}
+
+export function generatePolymarketUrl(market: MarketSlugInput): string {
   const slug = market.slug || market.market_slug || '';
   if (slug) return `https://polymarket.com/event/${slug}`;
   return `https://polymarket.com`;
 }
 
-export function generateTradeUrl(market, side = 'buy') {
+export function generateTradeUrl(market: MarketSlugInput, _side = 'buy'): string {
   return generatePolymarketUrl(market);
 }
 
-export function getCorrelationColor(value) {
+export function getCorrelationColor(value: number): string {
   if (value > 0.7) return '#10b981';
   if (value > 0.4) return '#34d399';
   if (value > 0) return '#6ee7b7';
@@ -160,13 +180,20 @@ export function getCorrelationColor(value) {
   return '#ef4444';
 }
 
-export function getDivergenceSeverity(magnitude) {
+export interface DivergenceSeverity {
+  level: 'extreme' | 'significant' | 'mild';
+  color: string;
+  label: string;
+  emoji: string;
+}
+
+export function getDivergenceSeverity(magnitude: number): DivergenceSeverity {
   if (magnitude >= 0.10) return { level: 'extreme', color: '#ef4444', label: 'Extreme', emoji: '🔴' };
   if (magnitude >= 0.05) return { level: 'significant', color: '#f59e0b', label: 'Significant', emoji: '🟠' };
   return { level: 'mild', color: '#eab308', label: 'Mild', emoji: '🟡' };
 }
 
-export function truncate(str, maxLen = 60) {
+export function truncate(str: string | null | undefined, maxLen = 60): string {
   if (!str) return '';
   return str.length > maxLen ? str.slice(0, maxLen) + '…' : str;
 }

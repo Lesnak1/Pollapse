@@ -5,13 +5,26 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "npx tsx lib/trading/clobClient.test.ts"
   },
   "dependencies": {
+    "@polymarket/builder-relayer-client": "^0.0.10",
+    "@polymarket/clob-client-v2": "^1.0.6",
+    "@privy-io/react-auth": "^3.32.2",
     "d3": "^7.9.0",
+    "ethers": "^6.17.0",
     "lucide-react": "^1.17.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "viem": "^2.53.1"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.3",
+    "@types/node": "^26.0.1",
+    "@types/react": "^19.2.17",
+    "typescript": "^6.0.3"
   }
 }

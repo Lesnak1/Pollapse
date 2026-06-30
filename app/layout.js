@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import CustomCursor from '@/components/CustomCursor';
 import TelegramFloatingWidget from '@/components/TelegramFloatingWidget';
+import Providers from '@/components/Providers';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -47,7 +48,9 @@ export default function RootLayout({ children }) {
         </div>
         <Navbar />
         <div className="page-wrapper">
-          {children}
+          <Providers>
+            {children}
+          </Providers>
         </div>
         <TelegramFloatingWidget />
         <footer className="footer">

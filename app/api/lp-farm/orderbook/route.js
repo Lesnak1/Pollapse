@@ -15,7 +15,7 @@ export async function GET(request) {
     }
 
     const cacheKey = `orderbook-detail:${tokenId}`;
-    const cached = cache.get(cacheKey);
+    const cached = await cache.get(cacheKey);
     if (cached) return NextResponse.json(cached);
 
     // Fetch live orderbook from Polymarket CLOB
@@ -33,7 +33,7 @@ export async function GET(request) {
       timestamp: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, result, 5000); // 5s short cache for high real-time responsiveness
+    await cache.set(cacheKey, result, 5000); // 5s short cache for high real-time responsiveness
     return NextResponse.json(result);
   } catch (error) {
     console.error('Orderbook detail proxy error:', error);

@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
     }
 
     const cacheKey = `market-detail:${slug}`;
-    const cached = cache.get(cacheKey);
+    const cached = await cache.get(cacheKey);
     if (cached) return NextResponse.json(cached);
 
     // Fetch market data from Gamma
@@ -63,7 +63,7 @@ export async function GET(request, { params }) {
       timestamp: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, result, 60000); // 1 min cache
+    await cache.set(cacheKey, result, 60000); // 1 min cache
     return NextResponse.json(result);
   } catch (error) {
     console.error('Market detail proxy error:', error);

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatCurrency, formatPercent, truncate, getDivergenceSeverity, getSectorIcon, getSectorColor } from '@/lib/utils';
 import { ArrowLeft, RefreshCw, AlertTriangle, ArrowUpRight, TrendingUp, Filter, Info, ShieldAlert } from 'lucide-react';
+import OrderTicket from '@/components/OrderTicket';
+import { Side } from '@polymarket/clob-client-v2';
 
 export default function DivergencesPage() {
   const [data, setData] = useState(null);
@@ -18,6 +20,31 @@ export default function DivergencesPage() {
   const [executingIdx, setExecutingIdx] = useState(null);
   const [executionStep, setExecutionStep] = useState('idle'); // idle, validating, leg_a, leg_b, success
   const [executedPairs, setExecutedPairs] = useState({}); // { [idx]: { budget, timestamp } }
+  const [activeTicket, setActiveTicket] = useState(null);
+
+  const resolveTokenForTrade = (div) => {
+    const isUnderpriced = div.priceB < div.expectedB;
+    const targetOutcome = isUnderpriced ? 'Yes' : 'No';
+    const market = div.marketBData;
+    let tokenId = null;
+    if (market?.tokens) {
+      const tok = market.tokens.find(t => t.outcome.toLowerCase() === targetOutcome.toLowerCase());
+      tokenId = tok ? tok.token_id : null;
+    }
+    if (!tokenId && market?.clobTokenIds) {
+      try {
+        const ids = typeof market.clobTokenIds === 'string' ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
+        tokenId = ids?.[0];
+      } catch {}
+    }
+    return {
+      tokenId: tokenId || '',
+      initialSide: Side.BUY,
+      initialPrice: isUnderpriced ? div.priceB : (1 - div.priceB),
+      initialSize: 20,
+      marketQuestion: `${market?.question || 'Market B Lag Leg'} (${targetOutcome})`
+    };
+  };
 
   const handleDeployArb = (idx) => {
     setExecutingIdx(idx);
@@ -376,13 +403,25 @@ export default function DivergencesPage() {
                       )}
                     </span>
                   </div>
-                  <button 
-                    onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}
-                    className="btn btn-primary btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 12px', fontSize: '0.7rem' }}
-                  >
-                    {expandedIdx === i ? 'Close Planner' : '⚡ Model Arbitrage'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button 
+                      onClick={() => {
+                        const params = resolveTokenForTrade(div);
+                        setActiveTicket(params);
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 12px', fontSize: '0.7rem', border: '1px solid var(--accent-purple)' }}
+                    >
+                      💼 Trade this signal
+                    </button>
+                    <button 
+                      onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}
+                      className="btn btn-primary btn-sm"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 12px', fontSize: '0.7rem' }}
+                    >
+                      {expandedIdx === i ? 'Close Planner' : '⚡ Model Arbitrage'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Collapsible Arbitrage Planner Workspace */}
@@ -571,6 +610,13 @@ export default function DivergencesPage() {
             );
           })}
         </div>
+      )}
+
+      {activeTicket && (
+        <OrderTicket 
+          onClose={() => setActiveTicket(null)} 
+          {...activeTicket} 
+        />
       )}
     </div>
   );

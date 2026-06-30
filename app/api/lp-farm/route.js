@@ -108,7 +108,7 @@ function getSportsDailyPool(question, eventSlug, endDate) {
 export async function GET(request) {
   try {
     const cacheKey = 'lp-farm-pools';
-    const cached = cache.get(cacheKey);
+    const cached = await cache.get(cacheKey);
     if (cached) return NextResponse.json(cached);
 
     // 1. Fetch active incentives from Polymarket exchange
@@ -229,7 +229,7 @@ export async function GET(request) {
       timestamp: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, result, 30000);
+    await cache.set(cacheKey, result, 30000);
     return NextResponse.json(result);
   } catch (error) {
     console.error('LP Farm pools API error:', error);

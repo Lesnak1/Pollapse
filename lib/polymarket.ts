@@ -7,7 +7,7 @@ import cache from './cache';
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
 
-async function fetchWithRetry(url, options = {}, retries = 3) {
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 4): Promise<any> {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url, {
@@ -18,23 +18,101 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
         },
       });
       if (res.status === 429) {
-        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
         continue;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       return await res.json();
     } catch (err) {
       if (i === retries - 1) throw err;
-      await new Promise(r => setTimeout(r, 500 * (i + 1)));
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
   }
 }
 
+// =========== TYPINGS ===========
+
+export interface GammaEvent {
+  id?: string | number;
+  title?: string;
+  slug?: string;
+  description?: string;
+  markets?: GammaMarket[];
+}
+
+export interface GammaToken {
+  token_id: string;
+  outcome: string;
+  price?: number;
+}
+
+export interface GammaMarket {
+  id?: string | number;
+  condition_id: string;
+  question: string;
+  description?: string;
+  slug?: string;
+  market_slug?: string;
+  clobTokenIds?: string | string[];
+  outcomePrices?: string | string[];
+  outcomes?: string[];
+  tags?: (string | { slug?: string; label?: string })[];
+  image?: string;
+  icon?: string;
+  liquidity?: string | number;
+  liquidityClob?: string | number;
+  bestBid?: string | number;
+  bestAsk?: string | number;
+  oneDayPriceChange?: string | number;
+  end_date_iso?: string;
+  endDate?: string;
+  active: boolean;
+  closed: boolean;
+  rewardsMinSize?: string | number;
+  rewardsMaxSpread?: string | number;
+  holdingRewardsEnabled?: boolean;
+  feesEnabled?: boolean;
+  lastTradePrice?: string | number;
+  tokens?: GammaToken[];
+  events?: { slug: string }[];
+  eventSlug?: string;
+  event_slug?: string;
+  volume?: string | number;
+  volumeNum?: string | number;
+}
+
+export interface CLOBMidpointResponse {
+  mid?: number;
+  [key: string]: any;
+}
+
+export interface CLOBOrderbookEntry {
+  price: string;
+  size: string;
+}
+
+export interface CLOBOrderbook {
+  bids: CLOBOrderbookEntry[];
+  asks: CLOBOrderbookEntry[];
+  error?: string;
+  [key: string]: any;
+}
+
+export interface PriceHistoryPoint {
+  t: number; // timestamp
+  p: number; // price
+}
+
+export interface PriceHistoryResponse {
+  history: PriceHistoryPoint[];
+  [key: string]: any;
+}
+
 // =========== GAMMA API (Market Discovery) ===========
 
-export async function fetchEvents(params = {}) {
+export async function fetchEvents(params: Record<string, string> = {}): Promise<GammaEvent[]> {
   const cacheKey = `events:${JSON.stringify(params)}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<GammaEvent[]>(cacheKey);
   if (cached) return cached;
 
   const query = new URLSearchParams({
@@ -45,13 +123,13 @@ export async function fetchEvents(params = {}) {
   });
 
   const data = await fetchWithRetry(`${GAMMA_API}/events?${query}`);
-  cache.set(cacheKey, data, 120000); // 2 min TTL
+  await cache.set(cacheKey, data, 120000); // 2 min TTL
   return data;
 }
 
-export async function fetchMarkets(params = {}) {
+export async function fetchMarkets(params: Record<string, string> = {}): Promise<GammaMarket[]> {
   const cacheKey = `markets:${JSON.stringify(params)}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<GammaMarket[]>(cacheKey);
   if (cached) return cached;
 
   const query = new URLSearchParams({
@@ -62,16 +140,16 @@ export async function fetchMarkets(params = {}) {
   });
 
   const data = await fetchWithRetry(`${GAMMA_API}/markets?${query}`);
-  cache.set(cacheKey, data, 120000);
+  await cache.set(cacheKey, data, 120000);
   return data;
 }
 
-export async function fetchAllActiveMarkets() {
+export async function fetchAllActiveMarkets(): Promise<GammaMarket[]> {
   const cacheKey = 'all-active-markets';
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<GammaMarket[]>(cacheKey);
   if (cached) return cached;
 
-  let allMarkets = [];
+  let allMarkets: GammaMarket[] = [];
   let offset = 0;
   const limit = 100;
 
@@ -85,36 +163,36 @@ export async function fetchAllActiveMarkets() {
       allMarkets = allMarkets.concat(data);
       if (data.length < limit) break;
       offset += limit;
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Error fetching markets page ${i}:`, err.message);
       break;
     }
   }
 
-  cache.set(cacheKey, allMarkets, 120000);
+  await cache.set(cacheKey, allMarkets, 120000);
   return allMarkets;
 }
 
-export async function fetchEventBySlug(slug) {
+export async function fetchEventBySlug(slug: string): Promise<GammaEvent> {
   const cacheKey = `event:${slug}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<GammaEvent>(cacheKey);
   if (cached) return cached;
 
   const data = await fetchWithRetry(`${GAMMA_API}/events/slug/${slug}`);
-  cache.set(cacheKey, data, 60000);
+  await cache.set(cacheKey, data, 60000);
   return data;
 }
 
-export async function fetchMarketBySlug(slug) {
+export async function fetchMarketBySlug(slug: string): Promise<GammaMarket | null> {
   const cacheKey = `market-slug:${slug}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<GammaMarket>(cacheKey);
   if (cached) return cached;
 
   // Try events first (most polymarket URLs use event slugs)
   try {
     const data = await fetchWithRetry(`${GAMMA_API}/events/slug/${slug}`);
     if (data) {
-      cache.set(cacheKey, data, 60000);
+      await cache.set(cacheKey, data, 60000);
       return data;
     }
   } catch (e) {
@@ -122,38 +200,38 @@ export async function fetchMarketBySlug(slug) {
   }
 
   const data = await fetchWithRetry(`${GAMMA_API}/markets/slug/${slug}`);
-  cache.set(cacheKey, data, 60000);
+  await cache.set(cacheKey, data, 60000);
   return data;
 }
 
-export async function searchMarkets(query) {
+export async function searchMarkets(query: string): Promise<GammaMarket[]> {
   const cacheKey = `search:${query}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<GammaMarket[]>(cacheKey);
   if (cached) return cached;
 
   const data = await fetchWithRetry(
     `${GAMMA_API}/markets?closed=false&limit=20&${new URLSearchParams({ tag: query })}`
   );
-  cache.set(cacheKey, data, 60000);
+  await cache.set(cacheKey, data, 60000);
   return data || [];
 }
 
 // =========== CLOB API (Prices & Orderbook) ===========
 
-export async function fetchMidpoint(tokenId) {
+export async function fetchMidpoint(tokenId: string): Promise<CLOBMidpointResponse> {
   const cacheKey = `midpoint:${tokenId}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<CLOBMidpointResponse>(cacheKey);
   if (cached) return cached;
 
   const data = await fetchWithRetry(`${CLOB_API}/midpoint?token_id=${tokenId}`);
-  cache.set(cacheKey, data, 30000); // 30s TTL
+  await cache.set(cacheKey, data, 30000); // 30s TTL
   return data;
 }
 
-export async function fetchBatchMidpoints(tokenIds) {
+export async function fetchBatchMidpoints(tokenIds: string[]): Promise<Record<string, number | null>> {
   if (!tokenIds || tokenIds.length === 0) return {};
-  const cacheKey = `batch-midpoints:${tokenIds.sort().join(',')}`;
-  const cached = cache.get(cacheKey);
+  const cacheKey = `batch-midpoints:${[...tokenIds].sort().join(',')}`;
+  const cached = await cache.get<Record<string, number | null>>(cacheKey);
   if (cached) return cached;
 
   try {
@@ -162,11 +240,11 @@ export async function fetchBatchMidpoints(tokenIds) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tokenIds),
     });
-    cache.set(cacheKey, data, 30000);
+    await cache.set(cacheKey, data, 30000);
     return data;
   } catch {
     // Fallback: fetch individually
-    const results = {};
+    const results: Record<string, number | null> = {};
     for (const id of tokenIds.slice(0, 20)) {
       try {
         const mid = await fetchMidpoint(id);
@@ -177,36 +255,36 @@ export async function fetchBatchMidpoints(tokenIds) {
   }
 }
 
-export async function fetchOrderbook(tokenId) {
+export async function fetchOrderbook(tokenId: string): Promise<CLOBOrderbook> {
   const cacheKey = `orderbook:${tokenId}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<CLOBOrderbook>(cacheKey);
   if (cached) return cached;
 
   const data = await fetchWithRetry(`${CLOB_API}/book?token_id=${tokenId}`);
-  cache.set(cacheKey, data, 15000); // 15s TTL
+  await cache.set(cacheKey, data, 15000); // 15s TTL
   return data;
 }
 
 // =========== PRICE HISTORY ===========
 
-export async function fetchPriceHistory(marketId, fidelity = 60) {
+export async function fetchPriceHistory(marketId: string, fidelity = 60): Promise<PriceHistoryResponse> {
   const cacheKey = `history:${marketId}:${fidelity}`;
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get<PriceHistoryResponse>(cacheKey);
   if (cached) return cached;
 
   try {
     const data = await fetchWithRetry(
       `${CLOB_API}/prices-history?market=${marketId}&interval=max&fidelity=${fidelity}`
     );
-    cache.set(cacheKey, data, 300000); // 5 min TTL
+    await cache.set(cacheKey, data, 300000); // 5 min TTL
     return data;
   } catch {
     return { history: [] };
   }
 }
 
-export async function fetchBatchPriceHistory(marketIds, fidelity = 60) {
-  const results = {};
+export async function fetchBatchPriceHistory(marketIds: string[], fidelity = 60): Promise<Record<string, PriceHistoryResponse>> {
+  const results: Record<string, PriceHistoryResponse> = {};
   const promises = marketIds.map(async (id) => {
     try {
       const data = await fetchPriceHistory(id, fidelity);
@@ -221,7 +299,7 @@ export async function fetchBatchPriceHistory(marketIds, fidelity = 60) {
 
 // =========== HELPERS ===========
 
-export function extractTokenId(market) {
+export function extractTokenId(market: GammaMarket): string | null {
   // Markets have clobTokenIds as a JSON string or array
   if (market.clobTokenIds) {
     try {
@@ -239,7 +317,7 @@ export function extractTokenId(market) {
   return null;
 }
 
-export function extractPrice(market) {
+export function extractPrice(market: GammaMarket): number {
   // Try outcomePrices first
   if (market.outcomePrices) {
     try {
@@ -251,18 +329,18 @@ export function extractPrice(market) {
       return 0.5;
     }
   }
-  if (market.bestBid != null) return parseFloat(market.bestBid);
-  if (market.lastTradePrice != null) return parseFloat(market.lastTradePrice);
+  if (market.bestBid != null) return parseFloat(market.bestBid as string);
+  if (market.lastTradePrice != null) return parseFloat(market.lastTradePrice as string);
   return 0.5;
 }
 
-export function extractVolume(market) {
-  if (market.volume != null) return parseFloat(market.volume);
-  if (market.volumeNum != null) return parseFloat(market.volumeNum);
+export function extractVolume(market: GammaMarket): number {
+  if (market.volume != null) return parseFloat((market as any).volume as string);
+  if ((market as any).volumeNum != null) return parseFloat((market as any).volumeNum as string);
   return 0;
 }
 
-export function extractEventSlug(market) {
+export function extractEventSlug(market: GammaMarket): string {
   if (market.events && market.events.length > 0 && market.events[0].slug) {
     return market.events[0].slug;
   }
@@ -270,4 +348,3 @@ export function extractEventSlug(market) {
   if (market.event_slug) return market.event_slug;
   return market.slug || market.market_slug || '';
 }
-

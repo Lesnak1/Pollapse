@@ -16,7 +16,7 @@ export async function GET(request) {
 
     // Check cache first (this is expensive computation)
     const cacheKey = `correlations:${minCorrelation}:${maxMarkets}`;
-    const cached = cache.get(cacheKey);
+    const cached = await cache.get(cacheKey);
     if (cached) return NextResponse.json(cached);
 
     // 1. Fetch top markets by volume
@@ -94,7 +94,7 @@ export async function GET(request) {
       timestamp: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, result, 300000); // 5 min cache
+    await cache.set(cacheKey, result, 300000); // 5 min cache
     return NextResponse.json(result);
   } catch (error) {
     console.error('Correlations API error:', error);

@@ -9,7 +9,7 @@ export const revalidate = 0;
 export async function GET() {
   try {
     const cacheKey = 'sector-indices';
-    const cached = cache.get(cacheKey);
+    const cached = await cache.get(cacheKey);
     if (cached) return NextResponse.json(cached);
 
     const markets = await fetchAllActiveMarkets();
@@ -21,7 +21,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, result, 120000); // 2 min cache
+    await cache.set(cacheKey, result, 120000); // 2 min cache
     return NextResponse.json(result);
   } catch (error) {
     console.error('Sectors API error:', error);

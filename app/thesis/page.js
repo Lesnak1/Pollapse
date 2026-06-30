@@ -17,12 +17,14 @@ import {
   FileCheck2,
   CheckCircle2
 } from 'lucide-react';
+import ThesisExecutionModal from '@/components/ThesisExecutionModal';
 
 export default function ThesisBuilderPage() {
   // Thesis state
   const [thesisName, setThesisName] = useState('My Macro Thesis');
   const [thesisItems, setThesisItems] = useState([]);
   const [savedTheses, setSavedTheses] = useState([]);
+  const [showExecutionModal, setShowExecutionModal] = useState(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,6 +103,8 @@ export default function ThesisBuilderPage() {
         weight: 3, // default confidence weight (1-5)
         sector: market.sector,
         volume: market.volume,
+        tokens: market.tokens || [],
+        clobTokenIds: market.clobTokenIds || [],
       }
     ]);
     setSearchQuery('');
@@ -206,13 +210,8 @@ export default function ThesisBuilderPage() {
     localStorage.setItem('pollapse_theses', JSON.stringify(updated));
   };
 
-  // Create combined deep link redirect
   const handleExecuteThesis = () => {
-    // Polymarket doesn't support multiple order placement in a single link,
-    // so we open all constituent links in new tabs.
-    thesisItems.forEach(item => {
-      window.open(`https://polymarket.com/event/${item.eventSlug || item.slug || ''}`, '_blank');
-    });
+    setShowExecutionModal(true);
   };
 
   // Calculate composite scoring index (weighted probabilities)
@@ -650,6 +649,13 @@ export default function ThesisBuilderPage() {
           </div>
         </div>
       </div>
+      {showExecutionModal && (
+        <ThesisExecutionModal
+          thesisItems={thesisItems}
+          thesisName={thesisName}
+          onClose={() => setShowExecutionModal(false)}
+        />
+      )}
     </div>
   );
 }

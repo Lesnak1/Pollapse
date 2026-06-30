@@ -65,12 +65,18 @@ export default function DashboardPage() {
           Pollapse maps hidden correlations between 600+ Polymarket events, detects divergence signals,
           and helps you build multi-market theses — all in one premium intelligence platform.
         </p>
-        <div className="hero-actions">
+        <div className="hero-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 24 }}>
           <Link href="/correlations" className="btn btn-primary btn-lg">
             ⚡ Explore Correlations
           </Link>
           <Link href="/divergences" className="btn btn-secondary btn-lg">
             🔍 Scan Divergences
+          </Link>
+          <Link href="/thesis" className="btn btn-secondary btn-lg" style={{ border: '1px solid var(--accent-purple)' }}>
+            🧠 Thesis Builder
+          </Link>
+          <Link href="/metrics" className="btn btn-secondary btn-lg" style={{ border: '1px solid var(--primary)' }}>
+            📊 Builder Metrics
           </Link>
         </div>
       </section>

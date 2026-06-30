@@ -9,7 +9,7 @@ interface ProvidersProps {
 }
 
 export default function Providers({ children }: ProvidersProps) {
-  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || '';
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || 'clqy12345abcdefghijmockid';
 
   return (
     <PrivyProvider
